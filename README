@@ -1,0 +1,2 @@
+the venv in the backend is simply for vsccode to understand the code.
+any dependencies used should be added to the requirements.txt file and built into the docker container

@@ -1,0 +1,53 @@
+# =========================
+# Root .gitignore (monorepo)
+# =========================
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# --- Secrets / env ---
+.env
+.env.*
+!.env.example
+
+# --- Logs ---
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Python / backend ---
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+.eggs/
+.venv/
+venv/
+ENV/
+env/
+
+# --- Node / frontend ---
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
+frontend/.vitest/
+frontend/coverage/
+*.tsbuildinfo
+
+# --- Database / misc ---
+*.sqlite3
+*.db
