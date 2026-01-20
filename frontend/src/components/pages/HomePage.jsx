@@ -1,87 +1,71 @@
 // src/components/pages/HomePage.jsx
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../context/AuthContext.jsx';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import AppNavbar from '../layout/AppNavbar.jsx';
 
 export const HomePage = () => {
-  const { user, logout } = useAuth();
   const navigate = useNavigate();
+
   const [userInfo, setUserInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch user information from /me endpoint
-useEffect(() => {
-  const fetchUserInfo = async () => {
-    try {
-      const token = localStorage.getItem('token'); // Changed from 'token' to match AuthContext
-      
-      console.log('Fetching user info...');
-      console.log('Token from localStorage:', token ? `${token.substring(0, 20)}...` : 'null');
-      
-      if (!token) {
-        console.error('No token found in localStorage');
-        setError('No authentication token found. Please log in.');
-        setLoading(false);
-        return;
-      }
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      try {
+        const token = localStorage.getItem('token');
 
-      const response = await fetch('/api/users/me', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      console.log('Response status:', response.status);
-
-      if (response.ok) {
-        const userData = await response.json();
-        console.log('User data received:', userData);
-        setUserInfo(userData);
-      } else {
-        const errorText = await response.text();
-        console.error('API Error Response:', errorText);
-        
-        if (response.status === 401) {
-          console.error('401 Unauthorized - removing invalid token');
-          localStorage.removeItem('token');
-          setError('Authentication failed. Please log in again.');
-        } else {
-          setError(`Failed to fetch user information: ${errorText}`);
+        if (!token) {
+          setError('No authentication token found. Please log in.');
+          setLoading(false);
+          return;
         }
+
+        const response = await fetch('/api/users/me', {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          const userData = await response.json();
+          setUserInfo(userData);
+        } else {
+          const errorText = await response.text();
+          if (response.status === 401) {
+            localStorage.removeItem('token');
+            setError('Authentication failed. Please log in again.');
+          } else {
+            setError(`Failed to fetch user information: ${errorText}`);
+          }
+        }
+      } catch {
+        setError('Network error occurred');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error('Network error occurred:', err);
-      setError('Network error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  fetchUserInfo();
-}, []);
+    fetchUserInfo();
+  }, []);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
+  const role = useMemo(() => (userInfo?.role || '').toLowerCase(), [userInfo]);
+  const isTeacher = role === 'teacher';
 
-  const handleCreateLesson = () => {
-    navigate('/create-lesson');
-  };
-
-  const handleViewCalendar = () => {
-    navigate('/calendar');
-  };
+  const handleCreateLesson = () => navigate('/create-lesson');
+  const handleViewCalendar = () => navigate('/calendar');
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+      <div className="min-h-screen bg-gray-50">
+        <AppNavbar title="Dashboard" />
+        <div className="flex items-center justify-center py-24">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading...</p>
+          </div>
         </div>
       </div>
     );
@@ -89,45 +73,27 @@ useEffect(() => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navigation Bar */}
-      <nav className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
-                Welcome back, {userInfo?.name || 'User'}!
-              </span>
-              <button
-                onClick={handleLogout}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <AppNavbar title="Dashboard" />
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         {/* User Information Card */}
         <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-light text-gray-900">Profile Information</h2>
-            <div className="flex items-center">
-              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                userInfo?.is_verified 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-yellow-100 text-yellow-800'
-              }`}>
+            <div className="flex items-center space-x-3">
+              <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800 capitalize">
+                {role || 'unknown'}
+              </span>
+              <span
+                className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                  userInfo?.is_verified ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                }`}
+              >
                 {userInfo?.is_verified ? 'Verified' : 'Unverified'}
               </span>
             </div>
           </div>
-          
+
           {error ? (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <p className="text-red-600">{error}</p>
@@ -144,6 +110,7 @@ useEffect(() => {
                   <p className="text-lg text-gray-900">{userInfo.email}</p>
                 </div>
               </div>
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
@@ -155,7 +122,9 @@ useEffect(() => {
                 </div>
                 {userInfo.organisation_id && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Organisation ID</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Organisation ID
+                    </label>
                     <p className="text-lg text-gray-900">#{userInfo.organisation_id}</p>
                   </div>
                 )}
@@ -164,17 +133,19 @@ useEffect(() => {
           ) : null}
         </div>
 
-        {/* Quick Actions */}
+        {/* Quick Actions (role-based) */}
         <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
           <h2 className="text-2xl font-light text-gray-900 mb-6">Quick Actions</h2>
           <div className="flex flex-col sm:flex-row gap-4">
-            <button
-              onClick={handleCreateLesson}
-              className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center"
-            >
-              <span className="mr-2">📝</span>
-              Create Lesson
-            </button>
+            {isTeacher && (
+              <button
+                onClick={handleCreateLesson}
+                className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center"
+              >
+                <span className="mr-2">📝</span>
+                Create Lesson
+              </button>
+            )}
             <button
               onClick={handleViewCalendar}
               className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center"
@@ -185,11 +156,10 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* Dashboard Cards */}
+        {/* Dashboard Overview (unchanged) */}
         <div className="bg-white rounded-xl shadow-sm p-8">
           <h2 className="text-2xl font-light text-gray-900 mb-6">Dashboard Overview</h2>
-          
-          {/* Quick Stats Cards */}
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
               <div className="flex items-center">
@@ -234,7 +204,6 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* Recent Activity */}
           <div className="border-t pt-8">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Activity</h3>
             <div className="space-y-3">
@@ -259,3 +228,5 @@ useEffect(() => {
     </div>
   );
 };
+
+export default HomePage;
