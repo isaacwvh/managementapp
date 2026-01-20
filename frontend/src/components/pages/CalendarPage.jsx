@@ -10,7 +10,6 @@ const toDateKey = (d) =>
   `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
 const parseApiDate = (dateStr) => {
-  // expects YYYY-MM-DD
   if (!dateStr) return null;
   const [y, m, d] = dateStr.split('-').map((v) => parseInt(v, 10));
   if (!y || !m || !d) return null;
@@ -18,7 +17,6 @@ const parseApiDate = (dateStr) => {
 };
 
 const parseApiTime = (timeStr) => {
-  // expects HH:MM or HH:MM:SS
   if (!timeStr) return { h: 0, m: 0 };
   const [h, m] = timeStr.split(':').map((v) => parseInt(v, 10));
   return { h: Number.isFinite(h) ? h : 0, m: Number.isFinite(m) ? m : 0 };
@@ -32,18 +30,25 @@ const formatTime = (timeStr) => {
 };
 
 const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
-
 const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
 const endOfMonth = (d) => new Date(d.getFullYear(), d.getMonth() + 1, 0);
-
-// Sunday-start week grid (0=Sun..6=Sat)
-const startOfWeek = (d) => addDays(d, -d.getDay());
+const startOfWeek = (d) => addDays(d, -d.getDay()); // Sunday start
 const endOfWeek = (d) => addDays(d, 6 - d.getDay());
 
 const monthLabel = (d) =>
   d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
 const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const namesSummary = (users, emptyLabel) => {
+  const list = Array.isArray(users) ? users : [];
+  const names = list.map((u) => u?.name).filter(Boolean);
+
+  if (names.length === 0) return emptyLabel;
+  if (names.length === 1) return names[0];
+  if (names.length <= 3) return names.join(', ');
+  return `${names[0]} +${names.length - 1} more`;
+};
 
 const CalendarPage = () => {
   const [userInfo, setUserInfo] = useState(null);
@@ -97,13 +102,12 @@ const CalendarPage = () => {
       setStudentEndpointMissing(false);
 
       try {
-        if (!token) return;
-        if (!role) return;
+        if (!token || !role) return;
 
         const endpoint =
           role === 'teacher'
             ? '/api/lessons/my-lessons'
-            : '/api/lessons/my-upcoming'; // student endpoint (not implemented yet)
+            : '/api/lessons/my-upcoming'; // not implemented yet
 
         const res = await fetch(endpoint, {
           headers: { Authorization: `Bearer ${token}` },
@@ -115,7 +119,6 @@ const CalendarPage = () => {
             setLessons([]);
             return;
           }
-
           const msg = await res.text();
           setError(msg || `Failed to load lessons (${res.status})`);
           setLessons([]);
@@ -123,8 +126,8 @@ const CalendarPage = () => {
         }
 
         const data = await res.json();
-
         const normalized = Array.isArray(data) ? data : [];
+
         normalized.sort((a, b) => {
           const da = parseApiDate(a.date)?.getTime() ?? 0;
           const db = parseApiDate(b.date)?.getTime() ?? 0;
@@ -155,7 +158,6 @@ const CalendarPage = () => {
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(lesson);
     }
-
     for (const [key, arr] of map.entries()) {
       arr.sort((a, b) => {
         const ta = parseApiTime(a.time);
@@ -165,7 +167,6 @@ const CalendarPage = () => {
       });
       map.set(key, arr);
     }
-
     return map;
   }, [lessons]);
 
@@ -187,6 +188,15 @@ const CalendarPage = () => {
   const todayKey = toDateKey(new Date());
   const viewMonth = viewDate.getMonth();
   const viewYear = viewDate.getFullYear();
+
+  const getCounterpartLine = (lesson) => {
+    if (role === 'teacher') {
+      // teacher sees students
+      return namesSummary(lesson?.students, 'No students');
+    }
+    // student sees teachers (future)
+    return namesSummary(lesson?.teachers, '(teachers TBD)');
+  };
 
   if (loading) {
     return (
@@ -268,10 +278,9 @@ const CalendarPage = () => {
                 return (
                   <div
                     key={key}
-                    className={[
-                      'bg-white min-h-[120px] p-2 align-top',
-                      !inMonth ? 'opacity-50' : '',
-                    ].join(' ')}
+                    className={['bg-white min-h-[140px] p-2', !inMonth ? 'opacity-50' : ''].join(
+                      ' '
+                    )}
                   >
                     <div className="flex items-center justify-between">
                       <span
@@ -287,21 +296,31 @@ const CalendarPage = () => {
                       )}
                     </div>
 
-                    <div className="mt-2 space-y-1">
-                      {dayLessons.slice(0, 3).map((lesson) => (
-                        <div
-                          key={lesson.id}
-                          className="text-[12px] rounded-md border border-gray-200 bg-gray-50 px-2 py-1"
-                          title={`${formatTime(lesson.time)} · ${lesson.location}`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium text-gray-800">
-                              {formatTime(lesson.time)}
-                            </span>
-                            <span className="truncate text-gray-600">{lesson.location}</span>
+                    <div className="mt-2 space-y-2">
+                      {dayLessons.slice(0, 3).map((lesson) => {
+                        const location = lesson?.location || 'Unknown location';
+                        const counterpart = getCounterpartLine(lesson);
+
+                        return (
+                          <div
+                            key={lesson.id}
+                            className="text-[12px] rounded-md border border-gray-200 bg-gray-50 px-2 py-2"
+                            title={`${formatTime(lesson.time)} · ${location} · ${counterpart}`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium text-gray-800">
+                                {formatTime(lesson.time)}
+                              </span>
+                              <span className="text-gray-600 truncate">{location}</span>
+                            </div>
+
+                            <div className="mt-1 text-gray-700 truncate">
+                              {role === 'teacher' ? 'Students: ' : 'Teacher: '}
+                              <span className="text-gray-600">{counterpart}</span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
 
                       {dayLessons.length > 3 && (
                         <div className="text-[12px] text-gray-500">
@@ -313,9 +332,7 @@ const CalendarPage = () => {
                         <div className="text-[12px] text-gray-300">—</div>
                       )}
 
-                      {lessonsLoading && (
-                        <div className="text-[12px] text-gray-400">Loading…</div>
-                      )}
+                      {lessonsLoading && <div className="text-[12px] text-gray-400">Loading…</div>}
                     </div>
                   </div>
                 );
@@ -331,22 +348,31 @@ const CalendarPage = () => {
               ) : lessons.length === 0 ? (
                 <div className="text-sm text-gray-500">No lessons found.</div>
               ) : (
-                lessons.slice(0, 10).map((l) => (
-                  <div
-                    key={l.id}
-                    className="flex items-center justify-between p-3 rounded-lg border border-gray-200 bg-white"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-gray-900">
-                        {l.date} · {formatTime(l.time)}
+                lessons.slice(0, 10).map((l) => {
+                  const location = l?.location || 'Unknown location';
+                  const counterpart = getCounterpartLine(l);
+
+                  return (
+                    <div
+                      key={l.id}
+                      className="flex items-start justify-between gap-4 p-3 rounded-lg border border-gray-200 bg-white"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-gray-900">
+                          {l.date} · {formatTime(l.time)}
+                        </div>
+                        <div className="text-sm text-gray-600 truncate">{location}</div>
+                        <div className="text-sm text-gray-600 truncate">
+                          {role === 'teacher' ? 'Students: ' : 'Teacher: '}
+                          {counterpart}
+                        </div>
                       </div>
-                      <div className="text-sm text-gray-600 truncate">{l.location}</div>
+                      <div className="text-sm text-gray-700 whitespace-nowrap">
+                        ${(Number(l.price || 0) / 100).toFixed(2)}
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-700">
-                      ${(Number(l.price || 0) / 100).toFixed(2)}
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -357,6 +383,7 @@ const CalendarPage = () => {
 };
 
 export default CalendarPage;
+
 
 /* =====================================================================================
    OPTIONAL BACKEND: add student endpoint (so the page works for students)

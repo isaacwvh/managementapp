@@ -1,3 +1,4 @@
+from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
@@ -9,6 +10,30 @@ from app.schemas.lesson import LessonCreate, LessonRead
 from app.utils import get_current_user, get_current_teacher, get_current_admin
 
 router = APIRouter(tags=["Lessons"])
+
+#FOR STUDENTS: GET UPCOMING LESSONS
+@router.get("/my-upcoming", response_model=List[LessonRead])
+def get_my_upcoming_lessons(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "student":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Students only",
+        )
+
+    today = date.today()
+
+    return (
+        db.query(Lesson)
+        .filter(
+            Lesson.students.any(id=current_user.id),
+            Lesson.date >= today,
+        )
+        .order_by(Lesson.date.asc(), Lesson.time.asc())
+        .all()
+    )
 
 
 # ✅ TEACHER: Create a lesson (teacher auto-added)
