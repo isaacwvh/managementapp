@@ -254,6 +254,20 @@ const CalendarPage = () => {
 
   return namesSummary(lesson?.teachers, '(teachers TBD)');
 };
+  
+  const formatDuration = (duration) => {
+  const n = Number(duration);
+  if (!Number.isFinite(n)) return '';
+
+  // if backend stores minutes
+  if (n >= 10) {
+    const hours = n / 60;
+    return `${hours % 1 === 0 ? hours.toFixed(0) : hours}h`;
+  }
+
+  // if backend sends hours directly
+  return `${n % 1 === 0 ? n.toFixed(0) : n}h`;
+};
 
   if (loading) {
     return (
@@ -357,6 +371,8 @@ const CalendarPage = () => {
                       {dayLessons.slice(0, 3).map((lesson) => {
                         const location = lesson?.location || 'Unknown location';
                         const counterpart = getCounterpartLine(lesson);
+                        const subject = lesson?.subject || 'No subject';
+                        const duration = formatDuration(lesson?.duration);
 
                         return (
                           <button
@@ -371,6 +387,10 @@ const CalendarPage = () => {
                                 {formatTime(lesson.time)}
                               </span>
                               <span className="text-gray-600 truncate">{location}</span>
+                            </div>
+
+                            <div className="mt-1 text-gray-700 truncate">
+                              {subject}{duration ? ` · ${duration}` : ''}
                             </div>
 
                             <div className="mt-1 text-gray-700 truncate">
@@ -410,6 +430,8 @@ const CalendarPage = () => {
       upcomingLessons.map((l) => {
         const location = l?.location || 'Unknown location';
         const counterpart = getCounterpartLine(l);
+        const subject = l?.subject || 'No subject';
+        const duration = formatDuration(l?.duration);
 
         return (
           <button
@@ -423,6 +445,9 @@ const CalendarPage = () => {
                 {l.date} · {formatTime(l.time)}
               </div>
               <div className="text-sm text-gray-600 truncate">{location}</div>
+              <div className="text-sm text-gray-700 truncate">
+                {subject}{duration ? ` · ${duration}` : ''}
+              </div>
               <div className="text-sm text-gray-600 truncate">
                 {role === 'teacher' ? 'Students: ' : 'Teacher: '}
                 {counterpart}

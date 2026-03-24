@@ -2,11 +2,22 @@
 import { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
 import AppNavbar from '../layout/AppNavbar.jsx';
+import { useNavigate } from 'react-router-dom';
+
+const DURATION_OPTIONS = [
+  { value: '1', label: '1 hour' },
+  { value: '1.5', label: '1.5 hours' },
+  { value: '2', label: '2 hours' },
+  { value: '2.5', label: '2.5 hours' },
+  { value: '3', label: '3 hours' },
+];
 
 const LessonCreateForm = () => {
   const [formData, setFormData] = useState({
     date: '',
     time: '',
+    subject: '',
+    duration: '1',
     location: '',
     price: '',
     teacher_ids: [],
@@ -24,10 +35,13 @@ const LessonCreateForm = () => {
   const [dataLoading, setDataLoading] = useState(true);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchData = async () => {
       setDataLoading(true);
+      setError('');
+
       try {
         const token = localStorage.getItem('token');
         const headers = {
@@ -47,10 +61,10 @@ const LessonCreateForm = () => {
         const teachersData = await teachersResponse.json();
         const studentsData = await studentsResponse.json();
 
-        setTeachers(teachersData);
-        setStudents(studentsData);
-        setFilteredTeachers(teachersData);
-        setFilteredStudents(studentsData);
+        setTeachers(Array.isArray(teachersData) ? teachersData : []);
+        setStudents(Array.isArray(studentsData) ? studentsData : []);
+        setFilteredTeachers(Array.isArray(teachersData) ? teachersData : []);
+        setFilteredStudents(Array.isArray(studentsData) ? studentsData : []);
       } catch {
         setError('Failed to load teachers and students');
       } finally {
@@ -64,8 +78,8 @@ const LessonCreateForm = () => {
   useEffect(() => {
     const filtered = teachers.filter(
       (teacher) =>
-        teacher.name.toLowerCase().includes(teacherSearch.toLowerCase()) ||
-        teacher.email.toLowerCase().includes(teacherSearch.toLowerCase())
+        teacher.name?.toLowerCase().includes(teacherSearch.toLowerCase()) ||
+        teacher.email?.toLowerCase().includes(teacherSearch.toLowerCase())
     );
     setFilteredTeachers(filtered);
   }, [teacherSearch, teachers]);
@@ -73,8 +87,8 @@ const LessonCreateForm = () => {
   useEffect(() => {
     const filtered = students.filter(
       (student) =>
-        student.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
-        student.email.toLowerCase().includes(studentSearch.toLowerCase())
+        student.name?.toLowerCase().includes(studentSearch.toLowerCase()) ||
+        student.email?.toLowerCase().includes(studentSearch.toLowerCase())
     );
     setFilteredStudents(filtered);
   }, [studentSearch, students]);
@@ -104,6 +118,7 @@ const LessonCreateForm = () => {
     try {
       const submitData = {
         ...formData,
+        duration: parseFloat(formData.duration),
         price: Math.round(parseFloat(formData.price) * 100),
         organisation_id: parseInt(formData.organisation_id || '1', 10),
       };
@@ -124,17 +139,22 @@ const LessonCreateForm = () => {
       }
 
       await response.json();
+      navigate('/calendar');
 
       setSuccess(true);
       setFormData({
         date: '',
         time: '',
+        subject: '',
+        duration: '1',
         location: '',
         price: '',
         teacher_ids: [],
         student_ids: [],
         organisation_id: formData.organisation_id,
       });
+      setTeacherSearch('');
+      setStudentSearch('');
     } catch (err) {
       setError(err?.message || 'Failed to create lesson. Please try again.');
     } finally {
@@ -218,6 +238,40 @@ const LessonCreateForm = () => {
               </div>
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
+                <input
+                  type="text"
+                  name="subject"
+                  value={formData.subject}
+                  onChange={handleInputChange}
+                  placeholder="Enter lesson subject"
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-sm focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-gray-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Duration (hours)
+                </label>
+                <select
+                  name="duration"
+                  value={formData.duration}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-sm bg-white focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-gray-500"
+                >
+                  {DURATION_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
               <input
@@ -232,7 +286,9 @@ const LessonCreateForm = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Price (in dollars)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Price (in dollars)
+              </label>
               <div className="relative">
                 <span className="absolute left-3 top-2 text-gray-500">$</span>
                 <input

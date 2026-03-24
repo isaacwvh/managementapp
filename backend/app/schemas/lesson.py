@@ -10,6 +10,8 @@ PaymentStatus = Literal["unpaid", "paid"]
 class LessonBase(BaseModel):
     date: date
     time: time
+    subject: str
+    duration: float
     location: str
     price: int
     organisation_id: int

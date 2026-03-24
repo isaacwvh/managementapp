@@ -48,6 +48,8 @@ def create_lesson(
     lesson = Lesson(
         date=lesson_data.date,
         time=lesson_data.time,
+        subject=lesson_data.subject,
+        duration=int(lesson_data.duration*60),
         location=lesson_data.location,
         price=lesson_data.price,
         organisation_id=current_teacher.organisation_id,

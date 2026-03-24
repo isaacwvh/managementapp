@@ -9,6 +9,8 @@ class Lesson(Base):
     id = Column(Integer, primary_key=True)
     date = Column(Date, nullable=False)
     time = Column(Time, nullable=False)
+    subject = Column(String, nullable=False)
+    duration = Column(Integer, nullable=False)
     location = Column(String, nullable=False)
     price = Column(Integer, nullable=False)
     organisation_id = Column(Integer, ForeignKey("organisations.id"), nullable=False)
