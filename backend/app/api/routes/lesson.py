@@ -5,6 +5,7 @@ from typing import List
 
 from app.database import get_db
 from app.models.lesson import Lesson
+from app.models.associations import LessonStudent
 from app.models.user import User
 from app.schemas.lesson import LessonCreate, LessonRead
 from app.utils import get_current_user, get_current_teacher, get_current_admin
@@ -37,7 +38,7 @@ def get_my_upcoming_lessons(
 
 
 # ✅ TEACHER: Create a lesson (teacher auto-added)
-@router.post("/", response_model=LessonRead) 
+@router.post("/", response_model=LessonRead)
 def create_lesson(
     lesson_data: LessonCreate,
     db: Session = Depends(get_db),
@@ -58,7 +59,13 @@ def create_lesson(
         teachers=[current_teacher]
     )
 
-    students = db.query(User).filter(User.id.in_(lesson_data.student_ids)).all() #frontend only returns stud ids. backend is expecting an object. this query returns the user object for each student
+    students = db.query(User).filter(User.id.in_(lesson_data.student_ids)).all()
+
+    if len(students) != len(set(lesson_data.student_ids)):
+        raise HTTPException(
+            status_code=400,
+            detail="One or more student IDs are invalid"
+        )
 
     for student in students:
         if student.organisation_id != current_teacher.organisation_id:
@@ -66,14 +73,20 @@ def create_lesson(
                 status_code=400,
                 detail="All students must belong to your organisation"
             )
-        
-        if student.role != 'student':
+
+        if student.role != "student":
             raise HTTPException(
                 status_code=400,
                 detail="All students must have role of student"
             )
 
-    lesson.students = students
+        lesson.student_links.append(
+            LessonStudent(
+                student=student,
+                attendance_status="assigned",
+                payment_status="unpaid"
+            )
+        )
 
     db.add(lesson)
     db.commit()
@@ -152,6 +165,33 @@ def delete_own_lesson(
     db.delete(lesson)
     db.commit()
 
+#teacher: get specific lesson
+@router.get("/{lesson_id}", response_model=LessonRead)
+def get_lesson(
+    lesson_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_teacher),
+):
+    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    if current_user.organisation_id != lesson.organisation_id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this lesson")
+
+    if current_user.role == "teacher":
+        teacher_ids = [teacher.id for teacher in lesson.teachers]
+        if current_user.id not in teacher_ids:
+            raise HTTPException(status_code=403, detail="Not authorized to view this lesson")
+
+    if current_user.role == "student":
+        student_ids = [link.student_id for link in lesson.student_links]
+        if current_user.id not in student_ids:
+            raise HTTPException(status_code=403, detail="Not authorized to view this lesson")
+
+    return lesson
+
 
 # ✅ ADMIN: Get all lessons in organisation
 @router.get("/", response_model=List[LessonRead])
@@ -163,7 +203,7 @@ def get_lessons_by_organisation(
 
 
 # ✅ ADMIN: Get a specific lesson
-@router.get("/{lesson_id}", response_model=LessonRead)
+@router.get("/admin/{lesson_id}", response_model=LessonRead)
 def get_lesson_by_id(
     lesson_id: int,
     db: Session = Depends(get_db),
@@ -176,7 +216,7 @@ def get_lesson_by_id(
 
 
 # ✅ ADMIN: Delete any lesson in their organisation
-@router.delete("/{lesson_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/admin/{lesson_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_any_lesson(
     lesson_id: int,
     db: Session = Depends(get_db),

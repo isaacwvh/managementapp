@@ -1,7 +1,7 @@
 from sqlalchemy import Column, ForeignKey, Integer, String, Date, Time
 from sqlalchemy.orm import relationship
 from app.database import Base
-from app.models.associations import lesson_teachers, lesson_students
+from app.models.associations import lesson_teachers
 
 class Lesson(Base):
     __tablename__ = "lessons"
@@ -22,8 +22,8 @@ class Lesson(Base):
         back_populates="teaching_lessons"
     )
 
-    students = relationship(
-        "User",
-        secondary=lesson_students,
-        back_populates="attending_lessons"
+    student_links = relationship(
+        "LessonStudent",
+        back_populates="lesson",
+        cascade="all, delete-orphan"
     )
