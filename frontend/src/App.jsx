@@ -8,6 +8,7 @@ import { HomePage } from './components/pages/HomePage';
 import LessonCreateForm from './components/pages/CreateLesson'; // default export
 import CalendarPage from './components/pages/CalendarPage'; // ✅ add this
 import LessonDetailPage from './components/pages/LessonDetailPage.jsx';
+import ManageLessonsPage from './components/pages/ManageLessonsPage.jsx';
 
 function App() {
   return (
@@ -48,6 +49,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
 
           <Route path="/lessons/:lessonId" element={<LessonDetailPage />} />
+          <Route path="/manage-lessons" element={<ManageLessonsPage />} />
         </Routes>
       </Router>
     </AuthProvider>

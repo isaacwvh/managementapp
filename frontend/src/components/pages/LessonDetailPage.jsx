@@ -275,8 +275,15 @@ try {
                   <span className="font-medium">Organisation ID:</span> {lesson.organisation_id}
                 </div>
                 <div>
+                  <span className="font-medium">Subject:</span> {lesson.subject}
+                </div>
+                <div>
+                  <span className="font-medium">Duration:</span> {lesson.duration}
+                </div>
+                <div>
                   <span className="font-medium">Students:</span> {studentLinks.length}
                 </div>
+                
               </div>
             </div>
           </div>
