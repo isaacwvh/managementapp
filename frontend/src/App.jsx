@@ -7,6 +7,7 @@ import { AuthPage } from './components/auth/AuthPage';
 import { HomePage } from './components/pages/HomePage';
 import LessonCreateForm from './components/pages/CreateLesson'; // default export
 import CalendarPage from './components/pages/CalendarPage'; // ✅ add this
+import LessonDetailPage from './components/pages/LessonDetailPage.jsx';
 
 function App() {
   return (
@@ -45,6 +46,8 @@ function App() {
 
           {/* Redirect any unknown routes to home */}
           <Route path="*" element={<Navigate to="/" replace />} />
+
+          <Route path="/lessons/:lessonId" element={<LessonDetailPage />} />
         </Routes>
       </Router>
     </AuthProvider>

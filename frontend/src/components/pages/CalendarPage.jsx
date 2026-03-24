@@ -3,6 +3,8 @@
    ===================================================================================== */
 import React, { useEffect, useMemo, useState } from 'react';
 import AppNavbar from '../layout/AppNavbar.jsx';
+import { useNavigate } from 'react-router-dom';
+
 
 const pad2 = (n) => String(n).padStart(2, '0');
 
@@ -61,6 +63,7 @@ const CalendarPage = () => {
   const [studentEndpointMissing, setStudentEndpointMissing] = useState(false);
 
   const token = useMemo(() => localStorage.getItem('token'), []);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchMe = async () => {
@@ -190,13 +193,15 @@ const CalendarPage = () => {
   const viewYear = viewDate.getFullYear();
 
   const getCounterpartLine = (lesson) => {
-    if (role === 'teacher') {
-      // teacher sees students
-      return namesSummary(lesson?.students, 'No students');
-    }
-    // student sees teachers (future)
-    return namesSummary(lesson?.teachers, '(teachers TBD)');
-  };
+  if (role === 'teacher') {
+    const students = Array.isArray(lesson?.student_links)
+      ? lesson.student_links.map((link) => link.student).filter(Boolean)
+      : [];
+    return namesSummary(students, 'No students');
+  }
+
+  return namesSummary(lesson?.teachers, '(teachers TBD)');
+};
 
   if (loading) {
     return (
@@ -302,11 +307,13 @@ const CalendarPage = () => {
                         const counterpart = getCounterpartLine(lesson);
 
                         return (
-                          <div
-                            key={lesson.id}
-                            className="text-[12px] rounded-md border border-gray-200 bg-gray-50 px-2 py-2"
-                            title={`${formatTime(lesson.time)} · ${location} · ${counterpart}`}
-                          >
+                          <button
+  key={lesson.id}
+  type="button"
+  onClick={() => navigate(`/lessons/${lesson.id}`)}
+  className="w-full text-left text-[12px] rounded-md border border-gray-200 bg-gray-50 px-2 py-2 hover:bg-gray-100 transition"
+  title={`${formatTime(lesson.time)} · ${location} · ${counterpart}`}
+>
                             <div className="flex items-center justify-between gap-2">
                               <span className="font-medium text-gray-800">
                                 {formatTime(lesson.time)}
@@ -318,7 +325,7 @@ const CalendarPage = () => {
                               {role === 'teacher' ? 'Students: ' : 'Teacher: '}
                               <span className="text-gray-600">{counterpart}</span>
                             </div>
-                          </div>
+                          </button>
                         );
                       })}
 

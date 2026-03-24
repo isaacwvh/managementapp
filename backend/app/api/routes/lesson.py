@@ -13,28 +13,28 @@ from app.utils import get_current_user, get_current_teacher, get_current_admin
 router = APIRouter(tags=["Lessons"])
 
 #FOR STUDENTS: GET UPCOMING LESSONS
-@router.get("/my-upcoming", response_model=List[LessonRead])
+@router.get("/my-upcoming", response_model=list[LessonRead])
 def get_my_upcoming_lessons(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if current_user.role != "student":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Students only",
-        )
+        raise HTTPException(status_code=403, detail="Students only")
 
     today = date.today()
 
-    return (
+    lessons = (
         db.query(Lesson)
+        .join(LessonStudent, LessonStudent.lesson_id == Lesson.id)
         .filter(
-            Lesson.students.any(id=current_user.id),
+            LessonStudent.student_id == current_user.id,
             Lesson.date >= today,
         )
-        .order_by(Lesson.date.asc(), Lesson.time.asc())
+        .order_by(Lesson.date, Lesson.time)
         .all()
     )
+
+    return lessons
 
 
 # ✅ TEACHER: Create a lesson (teacher auto-added)
