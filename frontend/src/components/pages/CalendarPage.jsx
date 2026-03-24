@@ -110,7 +110,7 @@ const CalendarPage = () => {
         const endpoint =
           role === 'teacher'
             ? '/api/lessons/my-lessons'
-            : '/api/lessons/my-upcoming'; // not implemented yet
+            : '/api/lessons/my-lessons-student'; // not implemented yet
 
         const res = await fetch(endpoint, {
           headers: { Authorization: `Bearer ${token}` },
@@ -172,6 +172,58 @@ const CalendarPage = () => {
     }
     return map;
   }, [lessons]);
+
+  const upcomingLessons = useMemo(() => {
+  const now = new Date();
+  const twoWeeksLater = new Date(now);
+  twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
+
+  return lessons
+    .filter((lesson) => {
+      const lessonDate = parseApiDate(lesson?.date);
+      if (!lessonDate || !lesson?.time) return false;
+
+      const { h, m } = parseApiTime(lesson.time);
+      const lessonDateTime = new Date(
+        lessonDate.getFullYear(),
+        lessonDate.getMonth(),
+        lessonDate.getDate(),
+        h,
+        m,
+        0,
+        0
+      );
+
+      return lessonDateTime >= now && lessonDateTime <= twoWeeksLater;
+    })
+    .sort((a, b) => {
+      const dateA = parseApiDate(a.date);
+      const timeA = parseApiTime(a.time);
+      const dateTimeA = new Date(
+        dateA.getFullYear(),
+        dateA.getMonth(),
+        dateA.getDate(),
+        timeA.h,
+        timeA.m,
+        0,
+        0
+      );
+
+      const dateB = parseApiDate(b.date);
+      const timeB = parseApiTime(b.time);
+      const dateTimeB = new Date(
+        dateB.getFullYear(),
+        dateB.getMonth(),
+        dateB.getDate(),
+        timeB.h,
+        timeB.m,
+        0,
+        0
+      );
+
+      return dateTimeA - dateTimeB;
+    });
+}, [lessons]);
 
   const gridDays = useMemo(() => {
     const mStart = startOfMonth(viewDate);
@@ -348,41 +400,43 @@ const CalendarPage = () => {
           </div>
 
           <div className="mt-6 border-t pt-4">
-            <h2 className="text-sm font-medium text-gray-900">Upcoming (next 10)</h2>
-            <div className="mt-2 space-y-2">
-              {lessonsLoading ? (
-                <div className="text-sm text-gray-500">Loading lessons…</div>
-              ) : lessons.length === 0 ? (
-                <div className="text-sm text-gray-500">No lessons found.</div>
-              ) : (
-                lessons.slice(0, 10).map((l) => {
-                  const location = l?.location || 'Unknown location';
-                  const counterpart = getCounterpartLine(l);
+  <h2 className="text-sm font-medium text-gray-900">Upcoming (next 2 weeks)</h2>
+  <div className="mt-2 space-y-2">
+    {lessonsLoading ? (
+      <div className="text-sm text-gray-500">Loading lessons…</div>
+    ) : upcomingLessons.length === 0 ? (
+      <div className="text-sm text-gray-500">No upcoming lessons in the next 2 weeks.</div>
+    ) : (
+      upcomingLessons.map((l) => {
+        const location = l?.location || 'Unknown location';
+        const counterpart = getCounterpartLine(l);
 
-                  return (
-                    <div
-                      key={l.id}
-                      className="flex items-start justify-between gap-4 p-3 rounded-lg border border-gray-200 bg-white"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-gray-900">
-                          {l.date} · {formatTime(l.time)}
-                        </div>
-                        <div className="text-sm text-gray-600 truncate">{location}</div>
-                        <div className="text-sm text-gray-600 truncate">
-                          {role === 'teacher' ? 'Students: ' : 'Teacher: '}
-                          {counterpart}
-                        </div>
-                      </div>
-                      <div className="text-sm text-gray-700 whitespace-nowrap">
-                        ${(Number(l.price || 0) / 100).toFixed(2)}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+        return (
+          <button
+  key={l.id}
+  type="button"
+  onClick={() => navigate(`/lessons/${l.id}`)}
+  className="w-full text-left flex items-start justify-between gap-4 p-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition"
+>
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-gray-900">
+                {l.date} · {formatTime(l.time)}
+              </div>
+              <div className="text-sm text-gray-600 truncate">{location}</div>
+              <div className="text-sm text-gray-600 truncate">
+                {role === 'teacher' ? 'Students: ' : 'Teacher: '}
+                {counterpart}
+              </div>
             </div>
-          </div>
+            <div className="text-sm text-gray-700 whitespace-nowrap">
+              ${(Number(l.price || 0) / 100).toFixed(2)}
+            </div>
+          </button>
+        );
+      })
+    )}
+  </div>
+</div>
         </div>
       </div>
     </div>
