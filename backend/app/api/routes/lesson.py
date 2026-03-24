@@ -165,12 +165,12 @@ def delete_own_lesson(
     db.delete(lesson)
     db.commit()
 
-#teacher: get specific lesson
+#ALL: get specific lesson
 @router.get("/{lesson_id}", response_model=LessonRead)
 def get_lesson(
     lesson_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_teacher),
+    current_user: User = Depends(get_current_user),
 ):
     lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
 
