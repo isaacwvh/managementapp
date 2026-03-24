@@ -7,7 +7,7 @@ from app.database import get_db
 from app.models.lesson import Lesson
 from app.models.associations import LessonStudent
 from app.models.user import User
-from app.schemas.lesson import LessonCreate, LessonRead
+from app.schemas.lesson import LessonCreate, LessonRead, LessonStudentRead, LessonStudentUpdate
 from app.utils import get_current_user, get_current_teacher, get_current_admin
 
 router = APIRouter(tags=["Lessons"])
@@ -191,6 +191,61 @@ def get_lesson(
             raise HTTPException(status_code=403, detail="Not authorized to view this lesson")
 
     return lesson
+
+#teacher: update student status per lesson
+@router.patch("/{lesson_id}/students/{student_id}", response_model=LessonStudentRead)
+def update_lesson_student_status(
+    lesson_id: int,
+    student_id: int,
+    update_data: LessonStudentUpdate,
+    db: Session = Depends(get_db),
+    current_teacher: User = Depends(get_current_teacher),
+):
+    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+
+    if not lesson:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lesson not found"
+        )
+
+    if lesson.organisation_id != current_teacher.organisation_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this lesson"
+        )
+
+    teacher_ids = [teacher.id for teacher in lesson.teachers]
+    if current_teacher.id not in teacher_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only teachers assigned to this lesson can update statuses"
+        )
+
+    lesson_student = (
+        db.query(LessonStudent)
+        .filter(
+            LessonStudent.lesson_id == lesson_id,
+            LessonStudent.student_id == student_id
+        )
+        .first()
+    )
+
+    if not lesson_student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student is not assigned to this lesson"
+        )
+
+    if update_data.attendance_status is not None:
+        lesson_student.attendance_status = update_data.attendance_status
+
+    if update_data.payment_status is not None:
+        lesson_student.payment_status = update_data.payment_status
+
+    db.commit()
+    db.refresh(lesson_student)
+    return lesson_student
 
 
 # ✅ ADMIN: Get all lessons in organisation

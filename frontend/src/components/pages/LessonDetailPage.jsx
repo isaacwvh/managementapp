@@ -35,6 +35,9 @@ const statusBadgeClass = (value, kind = 'default') => {
   return 'bg-gray-100 text-gray-700';
 };
 
+const ATTENDANCE_OPTIONS = ['assigned', 'attended', 'missed', 'cancelled'];
+const PAYMENT_OPTIONS = ['unpaid', 'paid'];
+
 const LessonDetailPage = () => {
   const { lessonId } = useParams();
   const navigate = useNavigate();
@@ -45,6 +48,7 @@ const LessonDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [lessonLoading, setLessonLoading] = useState(true);
   const [error, setError] = useState('');
+  const [savingMap, setSavingMap] = useState({});
 
   useEffect(() => {
     const fetchMe = async () => {
@@ -171,6 +175,46 @@ const LessonDetailPage = () => {
   const studentLinks = Array.isArray(lesson.student_links) ? lesson.student_links : [];
   const teachers = Array.isArray(lesson.teachers) ? lesson.teachers : [];
   const isTeacher = role === 'teacher';
+  const setRowSaving = (studentId, field, value) => {
+  const key = `${studentId}-${field}`;
+  setSavingMap((prev) => ({ ...prev, [key]: value }));
+};
+
+const handleStatusChange = async (studentId, field, value) => {
+try {
+    setRowSaving(studentId, field, true);
+    setError('');
+
+    const res = await fetch(`/api/lessons/${lesson.id}/students/${studentId}`, {
+    method: 'PATCH',
+    headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ [field]: value }),
+    });
+
+    if (!res.ok) {
+    const msg = await res.text();
+    throw new Error(msg || `Failed to update ${field}`);
+    }
+
+    const updatedLink = await res.json();
+
+    setLesson((prev) => ({
+    ...prev,
+    student_links: Array.isArray(prev?.student_links)
+        ? prev.student_links.map((link) =>
+            link.student_id === studentId ? { ...link, ...updatedLink } : link
+        )
+        : [],
+    }));
+} catch (err) {
+    setError(err?.message || 'Failed to update lesson status');
+} finally {
+    setRowSaving(studentId, field, false);
+}
+};
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -238,61 +282,88 @@ const LessonDetailPage = () => {
           </div>
 
           {isTeacher && (
-            <div className="mt-6 rounded-lg border border-gray-200 p-4">
-              <h2 className="text-sm font-medium text-gray-900">Students</h2>
+  <div className="mt-6 rounded-lg border border-gray-200 p-4">
+    <h2 className="text-sm font-medium text-gray-900">Students</h2>
 
-              <div className="mt-4 overflow-x-auto">
-                {studentLinks.length > 0 ? (
-                  <table className="min-w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-200 text-left text-gray-600">
-                        <th className="py-2 pr-4 font-medium">Student</th>
-                        <th className="py-2 pr-4 font-medium">Attendance</th>
-                        <th className="py-2 pr-4 font-medium">Payment</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {studentLinks.map((link) => {
-                        const student = link?.student;
-                        return (
-                          <tr
-                            key={`${link.student_id ?? student?.id ?? 'student'}-${lesson.id}`}
-                            className="border-b border-gray-100"
-                          >
-                            <td className="py-3 pr-4 text-gray-900">
-                              {student?.name || `Student #${student?.id ?? ''}`}
-                            </td>
-                            <td className="py-3 pr-4">
-                              <span
-                                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(
-                                  link?.attendance_status,
-                                  'attendance'
-                                )}`}
-                              >
-                                {link?.attendance_status || 'unknown'}
-                              </span>
-                            </td>
-                            <td className="py-3 pr-4">
-                              <span
-                                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(
-                                  link?.payment_status,
-                                  'payment'
-                                )}`}
-                              >
-                                {link?.payment_status || 'unknown'}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div className="text-sm text-gray-500">No students assigned.</div>
-                )}
-              </div>
-            </div>
-          )}
+    <div className="mt-4 overflow-x-auto">
+      {studentLinks.length > 0 ? (
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 text-left text-gray-600">
+              <th className="py-2 pr-4 font-medium">Student</th>
+              <th className="py-2 pr-4 font-medium">Attendance</th>
+              <th className="py-2 pr-4 font-medium">Payment</th>
+            </tr>
+          </thead>
+          <tbody>
+            {studentLinks.map((link) => {
+              const student = link?.student;
+              const attendanceSaving = !!savingMap[`${link.student_id}-attendance_status`];
+              const paymentSaving = !!savingMap[`${link.student_id}-payment_status`];
+
+              return (
+                <tr
+                  key={`${link.lesson_id}-${link.student_id}`}
+                  className="border-b border-gray-100"
+                >
+                  <td className="py-3 pr-4 text-gray-900">
+                    {student?.name || `Student #${student?.id ?? ''}`}
+                  </td>
+
+                  <td className="py-3 pr-4">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={link.attendance_status || 'assigned'}
+                        onChange={(e) =>
+                          handleStatusChange(link.student_id, 'attendance_status', e.target.value)
+                        }
+                        disabled={attendanceSaving}
+                        className="rounded-md border border-gray-300 px-2 py-1 text-sm bg-white"
+                      >
+                        {ATTENDANCE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                      {attendanceSaving && (
+                        <span className="text-xs text-gray-500">Saving...</span>
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="py-3 pr-4">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={link.payment_status || 'unpaid'}
+                        onChange={(e) =>
+                          handleStatusChange(link.student_id, 'payment_status', e.target.value)
+                        }
+                        disabled={paymentSaving}
+                        className="rounded-md border border-gray-300 px-2 py-1 text-sm bg-white"
+                      >
+                        {PAYMENT_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                      {paymentSaving && (
+                        <span className="text-xs text-gray-500">Saving...</span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      ) : (
+        <div className="text-sm text-gray-500">No students assigned.</div>
+      )}
+    </div>
+  </div>
+)}
         </div>
       </div>
     </div>

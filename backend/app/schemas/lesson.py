@@ -1,7 +1,10 @@
-from typing import List, Optional
+from typing import List, Optional, Literal
 from pydantic import BaseModel
 from datetime import date, time
 from app.schemas.user import UserRead
+
+AttendanceStatus = Literal["assigned", "attended", "missed", "cancelled"]
+PaymentStatus = Literal["unpaid", "paid"]
 
 
 class LessonBase(BaseModel):
@@ -17,12 +20,11 @@ class LessonCreate(LessonBase):
     student_ids: List[int]
 
 
-class LessonStudentBase(BaseModel):
-    attendance_status: str = "assigned"
-    payment_status: str = "unpaid"
-
-
-class LessonStudentRead(LessonStudentBase):
+class LessonStudentRead(BaseModel):
+    lesson_id: int
+    student_id: int
+    attendance_status: AttendanceStatus
+    payment_status: PaymentStatus
     student: UserRead
 
     class Config:
@@ -30,8 +32,8 @@ class LessonStudentRead(LessonStudentBase):
 
 
 class LessonStudentUpdate(BaseModel):
-    attendance_status: Optional[str] = None
-    payment_status: Optional[str] = None
+    attendance_status: Optional[AttendanceStatus] = None
+    payment_status: Optional[PaymentStatus] = None
 
 
 class LessonRead(LessonBase):
