@@ -13,6 +13,7 @@ export const AppNavbar = ({
   showManageStudentLesson = true,
   showProfile = true,
   showAdminManageStudents = true,
+  showAdminManageLessons = true,
 }) => {
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -130,6 +131,15 @@ export const AppNavbar = ({
                 className="text-sm font-medium text-gray-700 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 Manage Students
+              </button>
+            )}
+
+            {showAdminManageLessons && isAdmin && (
+              <button
+                onClick={() => onNav('/admin/manage-lessons')}
+                className="text-sm font-medium text-gray-700 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Manage Lessons
               </button>
             )}
 

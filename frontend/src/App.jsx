@@ -15,6 +15,8 @@ import StudentHomePage from './components/pages/StudentHomePage.jsx';
 import ProfilePage from './components/pages/ProfilePage.jsx';
 import AdminManageStudentsPage from './components/pages/AdminManageStudentsPage.jsx';
 import AdminManageStudentPage from './components/pages/AdminManageStudentPage.jsx';
+import AdminManageLessonsPage from './components/pages/AdminManageLessonsPage.jsx';
+import AdminLessonCreateForm from './components/pages/AdminCreateLessonForm.jsx.jsx';
 
 function App() {
   return (
@@ -62,6 +64,8 @@ function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/admin/students" element={<AdminManageStudentsPage />} />
           <Route path="/admin/students/:studentId" element={<AdminManageStudentPage />} />
+          <Route path="/admin/manage-lessons" element={<AdminManageLessonsPage />} />
+          <Route path="/admin/lessons/create" element={<AdminLessonCreateForm />} />
         </Routes>
       </Router>
     </AuthProvider>

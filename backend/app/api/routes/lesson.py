@@ -289,31 +289,34 @@ def admin_create_lesson(
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin),
 ):
-
-    # if lesson_data.organisation_id != current_admin.organisation_id:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_403_FORBIDDEN,
-    #         detail="You can only create lessons in your organisation"
-    #     )
-
-    # Fetch and validate teacher objects
     teachers = db.query(User).filter(User.id.in_(lesson_data.teacher_ids)).all()
+
+    if len(teachers) != len(set(lesson_data.teacher_ids)):
+        raise HTTPException(
+            status_code=400,
+            detail="One or more teacher IDs are invalid"
+        )
 
     for teacher in teachers:
         if teacher.organisation_id != current_admin.organisation_id:
             raise HTTPException(
                 status_code=400,
-                detail="All students must belong to your organisation"
+                detail="All teachers must belong to your organisation"
             )
-        
-        if teacher.role != 'teacher':
+
+        if teacher.role != "teacher":
             raise HTTPException(
                 status_code=400,
                 detail="All teachers must have role of teacher"
             )
 
-    # Fetch and validate student objects
     students = db.query(User).filter(User.id.in_(lesson_data.student_ids)).all()
+
+    if len(students) != len(set(lesson_data.student_ids)):
+        raise HTTPException(
+            status_code=400,
+            detail="One or more student IDs are invalid"
+        )
 
     for student in students:
         if student.organisation_id != current_admin.organisation_id:
@@ -321,8 +324,8 @@ def admin_create_lesson(
                 status_code=400,
                 detail="All students must belong to your organisation"
             )
-        
-        if student.role != 'student':
+
+        if student.role != "student":
             raise HTTPException(
                 status_code=400,
                 detail="All students must have role of student"
@@ -331,12 +334,22 @@ def admin_create_lesson(
     lesson = Lesson(
         date=lesson_data.date,
         time=lesson_data.time,
+        subject=lesson_data.subject,
+        duration=int(lesson_data.duration * 60),
         location=lesson_data.location,
         price=lesson_data.price,
         organisation_id=current_admin.organisation_id,
         teachers=teachers,
-        students=students,
     )
+
+    for student in students:
+        lesson.student_links.append(
+            LessonStudent(
+                student=student,
+                attendance_status="assigned",
+                payment_status="unpaid"
+            )
+        )
 
     db.add(lesson)
     db.commit()
