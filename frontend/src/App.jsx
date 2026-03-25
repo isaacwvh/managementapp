@@ -17,6 +17,7 @@ import AdminManageStudentsPage from './components/pages/AdminManageStudentsPage.
 import AdminManageStudentPage from './components/pages/AdminManageStudentPage.jsx';
 import AdminManageLessonsPage from './components/pages/AdminManageLessonsPage.jsx';
 import AdminLessonCreateForm from './components/pages/AdminCreateLessonForm.jsx.jsx';
+import LessonEditPage from './components/pages/LessonEditPage.jsx';
 
 function App() {
   return (
@@ -66,6 +67,7 @@ function App() {
           <Route path="/admin/students/:studentId" element={<AdminManageStudentPage />} />
           <Route path="/admin/manage-lessons" element={<AdminManageLessonsPage />} />
           <Route path="/admin/lessons/create" element={<AdminLessonCreateForm />} />
+          <Route path="/lessons/:lessonId/edit" element={<LessonEditPage />} />
         </Routes>
       </Router>
     </AuthProvider>

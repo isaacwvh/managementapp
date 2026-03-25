@@ -168,7 +168,6 @@ const LessonDetailPage = () => {
       setRowSaving(studentId, field, true);
       setError('');
 
-      // optimistic UI update immediately
       setLesson((prev) => ({
         ...prev,
         student_links: Array.isArray(prev?.student_links)
@@ -200,7 +199,6 @@ const LessonDetailPage = () => {
         throw new Error(msg || `Failed to update ${field}`);
       }
 
-      // if backend returns updated row, merge it in
       let updatedLink = null;
       try {
         updatedLink = await res.json();
@@ -228,7 +226,6 @@ const LessonDetailPage = () => {
         }));
       }
     } catch (err) {
-      // rollback if request failed
       setLesson(previousLesson);
       setError(err?.message || 'Failed to update lesson status');
     } finally {
@@ -309,13 +306,29 @@ const LessonDetailPage = () => {
 
       <div className="max-w-4xl mx-auto p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => navigate(backTo)}
-            className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm hover:bg-gray-50"
-          >
-            ← Back
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate(backTo)}
+              className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm hover:bg-gray-50"
+            >
+              ← Back
+            </button>
+
+            {(isTeacher || isAdmin) && (
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(`/lessons/${lessonId}/edit`, {
+                    state: { from: location.pathname },
+                  })
+                }
+                className="px-3 py-2 rounded-lg border border-gray-900 bg-gray-900 text-white text-sm hover:bg-black"
+              >
+                Edit lesson
+              </button>
+            )}
+          </div>
 
           {error && (
             <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -455,7 +468,7 @@ const LessonDetailPage = () => {
                           </div>
                         </div>
 
-                        {(isTeacher || isAdmin) ? (
+                        {isTeacher || isAdmin ? (
                           <div className="flex flex-col sm:flex-row gap-3">
                             <div>
                               <label className="block text-xs text-gray-500 mb-1">

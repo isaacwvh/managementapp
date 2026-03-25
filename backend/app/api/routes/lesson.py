@@ -99,44 +99,108 @@ def get_my_lessons(
     return db.query(Lesson).filter(Lesson.teachers.any(id=current_teacher.id)).all()
 
 # ✅ TEACHER: Update a lesson they are teaching
-@router.put("/{lesson_id}", response_model=LessonRead) #lesson ID comes from the url while lesson_data is populated by the schema
+@router.put("/{lesson_id}", response_model=LessonRead)
 def update_lesson(
     lesson_id: int,
     lesson_data: LessonCreate,
     db: Session = Depends(get_db),
-    current_teacher: User = Depends(get_current_teacher),
+    current_user: User = Depends(get_current_user),
 ):
     lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
 
-    if current_teacher not in lesson.teachers:
+    # if current_teacher not in lesson.teachers:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="You can only update lessons you are teaching"
+    #     )
+    if current_user.role == 'student':
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only update lessons you are teaching"
+            detail="Students cannot edit lessons"
         )
 
-    # Update fields
+    if lesson_data.organisation_id != current_user.organisation_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update lessons in your organisation"
+        )
+
+    # Update simple lesson fields
     lesson.date = lesson_data.date
     lesson.time = lesson_data.time
+    lesson.subject = lesson_data.subject
+    lesson.duration = round(lesson_data.duration * 60)
     lesson.location = lesson_data.location
     lesson.price = lesson_data.price
+    lesson.organisation_id = current_user.organisation_id
 
+    # Fetch teachers
+    teachers = db.query(User).filter(User.id.in_(lesson_data.teacher_ids)).all()
+
+    if len(teachers) != len(set(lesson_data.teacher_ids)):
+        raise HTTPException(
+            status_code=400,
+            detail="One or more teacher IDs are invalid"
+        )
+
+    for teacher in teachers:
+        if teacher.organisation_id != current_user.organisation_id:
+            raise HTTPException(
+                status_code=400,
+                detail="All teachers must belong to your organisation"
+            )
+
+        if teacher.role != "teacher":
+            raise HTTPException(
+                status_code=400,
+                detail="All selected teachers must have role of teacher"
+            )
+
+    # Update lesson teachers
+    lesson.teachers = teachers
+
+    # Fetch students
     students = db.query(User).filter(User.id.in_(lesson_data.student_ids)).all()
 
+    if len(students) != len(set(lesson_data.student_ids)):
+        raise HTTPException(
+            status_code=400,
+            detail="One or more student IDs are invalid"
+        )
+
     for student in students:
-        if student.organisation_id != current_teacher.organisation_id:
+        if student.organisation_id != current_user.organisation_id:
             raise HTTPException(
                 status_code=400,
                 detail="All students must belong to your organisation"
             )
-        if student.role != 'student':
+
+        if student.role != "student":
             raise HTTPException(
                 status_code=400,
                 detail="All students must have role of student"
             )
 
-    lesson.students = students
+    # Preserve existing student statuses where possible
+    existing_links = {link.student_id: link for link in lesson.student_links}
+
+    # Clear old student links
+    lesson.student_links.clear()
+
+    # Rebuild student links
+    for student in students:
+        old_link = existing_links.get(student.id)
+
+        lesson.student_links.append(
+            LessonStudent(
+                student=student,
+                attendance_status=old_link.attendance_status if old_link else "assigned",
+                payment_status=old_link.payment_status if old_link else "unpaid"
+            )
+        )
+
     db.commit()
     db.refresh(lesson)
     return lesson
