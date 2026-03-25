@@ -9,6 +9,7 @@ export const AppNavbar = ({
   showCalendar = true,
   showCreateLesson = true,
   showManageLesson = true,
+  showAnalytics = true,
 }) => {
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -81,6 +82,15 @@ export const AppNavbar = ({
               </button>
             )}
 
+            {showAnalytics && isTeacher && (
+              <button
+                onClick={() => onNav('/analytics')}
+                className="text-sm font-medium text-gray-700 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Analytics
+              </button>
+            )}
+
             {showCalendar && (
               <button
                 onClick={() => onNav('/calendar')}
@@ -90,7 +100,7 @@ export const AppNavbar = ({
               </button>
             )}
 
-            <span className="ml-2 text-xl font-semibold text-gray-900">{title}</span>
+            {/* <span className="ml-2 text-xl font-semibold text-gray-900">{title}</span> */}
           </div>
 
           <div className="flex items-center space-x-4">

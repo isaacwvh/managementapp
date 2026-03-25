@@ -9,6 +9,7 @@ import LessonCreateForm from './components/pages/CreateLesson'; // default expor
 import CalendarPage from './components/pages/CalendarPage'; // ✅ add this
 import LessonDetailPage from './components/pages/LessonDetailPage.jsx';
 import ManageLessonsPage from './components/pages/ManageLessonsPage.jsx';
+import TeacherAnalyticsPage from './components/pages/TeacherAnalyticsPage.jsx';
 
 function App() {
   return (
@@ -50,6 +51,7 @@ function App() {
 
           <Route path="/lessons/:lessonId" element={<LessonDetailPage />} />
           <Route path="/manage-lessons" element={<ManageLessonsPage />} />
+          <Route path="/analytics" element={<TeacherAnalyticsPage />} />
         </Routes>
       </Router>
     </AuthProvider>
