@@ -12,6 +12,7 @@ export const AppNavbar = ({
   showAnalytics = true,
   showManageStudentLesson = true,
   showProfile = true,
+  showAdminManageStudents = true,
 }) => {
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -43,6 +44,7 @@ export const AppNavbar = ({
   const role = useMemo(() => (userInfo?.role || '').toLowerCase(), [userInfo]);
   const isTeacher = role === 'teacher';
   const isStudent = role === 'student';
+  const isAdmin = role === 'admin';
 
   const onNav = (to) => {
     if (location.pathname !== to) navigate(to);
@@ -112,7 +114,7 @@ export const AppNavbar = ({
               </button>
             )}
 
-            {showCalendar && (
+            {showCalendar && (isTeacher || isStudent) && (
               <button
                 onClick={() => onNav('/calendar')}
                 className="text-sm font-medium text-gray-700 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -120,6 +122,17 @@ export const AppNavbar = ({
                 Calendar
               </button>
             )}
+
+            {/* admin panel */}
+            {showAdminManageStudents && isAdmin && (
+              <button
+                onClick={() => onNav('/admin/students')}
+                className="text-sm font-medium text-gray-700 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Manage Students
+              </button>
+            )}
+
 
             {/* <span className="ml-2 text-xl font-semibold text-gray-900">{title}</span> */}
           </div>

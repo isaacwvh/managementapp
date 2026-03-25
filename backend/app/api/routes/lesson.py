@@ -255,16 +255,16 @@ def get_lessons_by_organisation(
 
 
 # ✅ ADMIN: Get a specific lesson
-@router.get("/admin/{lesson_id}", response_model=LessonRead)
-def get_lesson_by_id(
-    lesson_id: int,
-    db: Session = Depends(get_db),
-    current_admin: User = Depends(get_current_admin),
-):
-    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
-    if not lesson or lesson.organisation_id != current_admin.organisation_id:
-        raise HTTPException(status_code=404, detail="Lesson not found")
-    return lesson
+# @router.get("/admin/{lesson_id}", response_model=LessonRead)
+# def get_lesson_by_id(
+#     lesson_id: int,
+#     db: Session = Depends(get_db),
+#     current_admin: User = Depends(get_current_admin),
+# ):
+#     lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+#     if not lesson or lesson.organisation_id != current_admin.organisation_id:
+#         raise HTTPException(status_code=404, detail="Lesson not found")
+#     return lesson
 
 
 # ✅ ADMIN: Delete any lesson in their organisation
@@ -342,3 +342,55 @@ def admin_create_lesson(
     db.commit()
     db.refresh(lesson)
     return lesson
+
+#admin: get all lessons for a specific student:
+@router.get("/admin/students/{student_id}/lessons", response_model=list[LessonRead])
+def get_lessons_for_student(
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    student = db.query(User).filter(
+        User.id == student_id,
+        User.organisation_id == current_admin.organisation_id
+    ).first()
+
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    if student.role != "student":
+        raise HTTPException(status_code=400, detail="User is not a student")
+
+    lessons = (
+        db.query(Lesson)
+        .join(LessonStudent, LessonStudent.lesson_id == Lesson.id)
+        .filter(LessonStudent.student_id == student_id)
+        .order_by(Lesson.date, Lesson.time)
+        .all()
+    )
+
+    return lessons
+
+#admin: get all lessons for a specific teacher
+@router.get("/admin/teachers/{teacher_id}/lessons", response_model=List[LessonRead])
+def get_lessons_for_teacher(
+    teacher_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin),
+):
+    teacher = db.query(User).filter(
+        User.id == teacher_id,
+        User.role == "teacher",
+        User.organisation_id == current_admin.organisation_id
+    ).first()
+
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+
+    return (
+        db.query(Lesson)
+        .filter(Lesson.teachers.any(id=teacher_id))
+        .order_by(Lesson.date, Lesson.time)
+        .all()
+    )
+
