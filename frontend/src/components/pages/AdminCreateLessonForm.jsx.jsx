@@ -34,6 +34,7 @@ const AdminLessonCreateForm = () => {
   const [dataLoading, setDataLoading] = useState(true);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -62,15 +63,18 @@ const AdminLessonCreateForm = () => {
         const teachersData = await teachersResponse.json();
         const studentsData = await studentsResponse.json();
 
+        const teacherList = Array.isArray(teachersData) ? teachersData : [];
+        const studentList = Array.isArray(studentsData) ? studentsData : [];
+
         setFormData((prev) => ({
           ...prev,
-          organisation_id: meData.organisation_id ?? '',
+          organisation_id: String(meData.organisation_id ?? ''),
         }));
 
-        setTeachers(Array.isArray(teachersData) ? teachersData : []);
-        setStudents(Array.isArray(studentsData) ? studentsData : []);
-        setFilteredTeachers(Array.isArray(teachersData) ? teachersData : []);
-        setFilteredStudents(Array.isArray(studentsData) ? studentsData : []);
+        setTeachers(teacherList);
+        setStudents(studentList);
+        setFilteredTeachers(teacherList);
+        setFilteredStudents(studentList);
       } catch {
         setError('Failed to load required data');
       } finally {
@@ -99,12 +103,53 @@ const AdminLessonCreateForm = () => {
     setFilteredStudents(filtered);
   }, [studentSearch, students]);
 
+  const validateForm = () => {
+    const errors = {};
+
+    if (!formData.date) errors.date = 'Date is required';
+    if (!formData.time) errors.time = 'Time is required';
+    if (!formData.subject.trim()) errors.subject = 'Subject is required';
+    if (!formData.duration) errors.duration = 'Duration is required';
+    if (!formData.location.trim()) errors.location = 'Location is required';
+
+    if (formData.price === '' || formData.price === null) {
+      errors.price = 'Price is required';
+    } else if (isNaN(parseFloat(formData.price))) {
+      errors.price = 'Price must be a valid number';
+    } else if (parseFloat(formData.price) <= 0) {
+      errors.price = 'Price must be greater than 0';
+    }
+
+    if (!formData.teacher_ids.length) {
+      errors.teacher_ids = 'Please select at least one teacher';
+    }
+
+    if (!formData.student_ids.length) {
+      errors.student_ids = 'Please select at least one student';
+    }
+
+    if (!formData.organisation_id) {
+      errors.organisation_id = 'Organisation could not be determined';
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+
     setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
+
+    setFieldErrors((prev) => ({
+      ...prev,
+      [name]: '',
+    }));
+
+    setError('');
   };
 
   const handleMultiSelect = (name, id) => {
@@ -114,12 +159,25 @@ const AdminLessonCreateForm = () => {
         ? prev[name].filter((item) => item !== id)
         : [...prev[name], id],
     }));
+
+    setFieldErrors((prev) => ({
+      ...prev,
+      [name]: '',
+    }));
+
+    setError('');
   };
 
   const handleSubmit = async () => {
-    setLoading(true);
     setError('');
     setSuccess(false);
+
+    if (!validateForm()) {
+      setError('Please fill in all required fields before submitting.');
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const submitData = {
@@ -141,11 +199,16 @@ const AdminLessonCreateForm = () => {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `Error ${response.status}: ${response.statusText}`);
+        throw new Error(
+          typeof errorData.detail === 'string'
+            ? errorData.detail
+            : `Error ${response.status}: ${response.statusText}`
+        );
       }
 
       await response.json();
       setSuccess(true);
+      setFieldErrors({});
 
       navigate('/admin/manage-lessons');
     } catch (err) {
@@ -164,6 +227,13 @@ const AdminLessonCreateForm = () => {
     if (selected.length <= 3) return selected.map((item) => item.name).join(', ');
     return `${selected[0].name} and ${selected.length - 1} others`;
   };
+
+  const inputClass = (fieldName) =>
+    `w-full px-3 py-2 border rounded-sm focus:outline-none focus:ring-1 ${
+      fieldErrors[fieldName]
+        ? 'border-red-500 focus:ring-red-500 focus:border-red-500'
+        : 'border-gray-300 focus:ring-gray-500 focus:border-gray-500'
+    }`;
 
   if (dataLoading) {
     return (
@@ -207,54 +277,65 @@ const AdminLessonCreateForm = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Date <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="date"
                   name="date"
                   value={formData.date}
                   onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-sm focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-gray-500"
+                  className={inputClass('date')}
                 />
+                {fieldErrors.date && (
+                  <p className="mt-1 text-sm text-red-600">{fieldErrors.date}</p>
+                )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Time <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="time"
                   name="time"
                   value={formData.time}
                   onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-sm focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-gray-500"
+                  className={inputClass('time')}
                 />
+                {fieldErrors.time && (
+                  <p className="mt-1 text-sm text-red-600">{fieldErrors.time}</p>
+                )}
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Subject</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Subject <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   name="subject"
                   value={formData.subject}
                   onChange={handleInputChange}
                   placeholder="Enter lesson subject"
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-sm focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-gray-500"
+                  className={inputClass('subject')}
                 />
+                {fieldErrors.subject && (
+                  <p className="mt-1 text-sm text-red-600">{fieldErrors.subject}</p>
+                )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Duration (hours)
+                  Duration (hours) <span className="text-red-500">*</span>
                 </label>
                 <select
                   name="duration"
                   value={formData.duration}
                   onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-sm bg-white focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-gray-500"
+                  className={`${inputClass('duration')} bg-white`}
                 >
                   {DURATION_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -262,25 +343,32 @@ const AdminLessonCreateForm = () => {
                     </option>
                   ))}
                 </select>
+                {fieldErrors.duration && (
+                  <p className="mt-1 text-sm text-red-600">{fieldErrors.duration}</p>
+                )}
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Location <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
                 name="location"
                 value={formData.location}
                 onChange={handleInputChange}
                 placeholder="Enter lesson location"
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-sm focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-gray-500"
+                className={inputClass('location')}
               />
+              {fieldErrors.location && (
+                <p className="mt-1 text-sm text-red-600">{fieldErrors.location}</p>
+              )}
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Price (in dollars)
+                Price (per hour) <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-2 text-gray-500">$</span>
@@ -292,10 +380,16 @@ const AdminLessonCreateForm = () => {
                   placeholder="0.00"
                   min="0"
                   step="0.01"
-                  required
-                  className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-sm focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-gray-500"
+                  className={`w-full pl-8 pr-3 py-2 border rounded-sm focus:outline-none focus:ring-1 ${
+                    fieldErrors.price
+                      ? 'border-red-500 focus:ring-red-500 focus:border-red-500'
+                      : 'border-gray-300 focus:ring-gray-500 focus:border-gray-500'
+                  }`}
                 />
               </div>
+              {fieldErrors.price && (
+                <p className="mt-1 text-sm text-red-600">{fieldErrors.price}</p>
+              )}
             </div>
           </div>
 
@@ -303,6 +397,7 @@ const AdminLessonCreateForm = () => {
             <h2 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
               Select Teachers
             </h2>
+
             <div className="text-sm text-gray-600 mb-2">
               {getSelectedCount(formData.teacher_ids)} selected:{' '}
               {getSelectedNames(formData.teacher_ids, teachers)}
@@ -321,7 +416,11 @@ const AdminLessonCreateForm = () => {
               />
             </div>
 
-            <div className="border border-gray-200 rounded-sm max-h-48 overflow-y-auto">
+            <div
+              className={`border rounded-sm max-h-48 overflow-y-auto ${
+                fieldErrors.teacher_ids ? 'border-red-500' : 'border-gray-200'
+              }`}
+            >
               {filteredTeachers.length === 0 ? (
                 <div className="p-4 text-gray-500 text-sm">No teachers found</div>
               ) : (
@@ -344,12 +443,17 @@ const AdminLessonCreateForm = () => {
                 ))
               )}
             </div>
+
+            {fieldErrors.teacher_ids && (
+              <p className="text-sm text-red-600">{fieldErrors.teacher_ids}</p>
+            )}
           </div>
 
           <div className="space-y-4">
             <h2 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
               Select Students
             </h2>
+
             <div className="text-sm text-gray-600 mb-2">
               {getSelectedCount(formData.student_ids)} selected:{' '}
               {getSelectedNames(formData.student_ids, students)}
@@ -368,7 +472,11 @@ const AdminLessonCreateForm = () => {
               />
             </div>
 
-            <div className="border border-gray-200 rounded-sm max-h-48 overflow-y-auto">
+            <div
+              className={`border rounded-sm max-h-48 overflow-y-auto ${
+                fieldErrors.student_ids ? 'border-red-500' : 'border-gray-200'
+              }`}
+            >
               {filteredStudents.length === 0 ? (
                 <div className="p-4 text-gray-500 text-sm">No students found</div>
               ) : (
@@ -391,6 +499,10 @@ const AdminLessonCreateForm = () => {
                 ))
               )}
             </div>
+
+            {fieldErrors.student_ids && (
+              <p className="text-sm text-red-600">{fieldErrors.student_ids}</p>
+            )}
           </div>
 
           <div className="pt-6 border-t border-gray-200">
