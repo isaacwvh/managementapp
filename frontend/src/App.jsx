@@ -12,6 +12,7 @@ import ManageLessonsPage from './components/pages/ManageLessonsPage.jsx';
 import TeacherAnalyticsPage from './components/pages/TeacherAnalyticsPage.jsx';
 import ManageStudentLessonsPage from './components/pages/ManageStudentLessonsPage.jsx';
 import StudentHomePage from './components/pages/StudentHomePage.jsx';
+import ProfilePage from './components/pages/ProfilePage.jsx';
 
 function App() {
   return (
@@ -56,6 +57,7 @@ function App() {
           <Route path="/analytics" element={<TeacherAnalyticsPage />} />
           <Route path="/student/manage-lessons" element={<ManageStudentLessonsPage />} />
           <Route path="/student" element={<StudentHomePage />} />
+          <Route path="/profile" element={<ProfilePage />} />
         </Routes>
       </Router>
     </AuthProvider>
