@@ -378,7 +378,11 @@ const CalendarPage = () => {
                           <button
   key={lesson.id}
   type="button"
-  onClick={() => navigate(`/lessons/${lesson.id}`)}
+  onClick={() =>
+  navigate(`/lessons/${lesson.id}`, {
+    state: { from: '/calendar' },
+  })
+}
   className="w-full text-left text-[12px] rounded-md border border-gray-200 bg-gray-50 px-2 py-2 hover:bg-gray-100 transition"
   title={`${formatTime(lesson.time)} · ${location} · ${counterpart}`}
 >
@@ -437,7 +441,11 @@ const CalendarPage = () => {
           <button
   key={l.id}
   type="button"
-  onClick={() => navigate(`/lessons/${l.id}`)}
+  onClick={() =>
+  navigate(`/lessons/${l.id}`, {
+    state: { from: '/calendar' },
+  })
+}
   className="w-full text-left flex items-start justify-between gap-4 p-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition"
 >
             <div className="min-w-0">

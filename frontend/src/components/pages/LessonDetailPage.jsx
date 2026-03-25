@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import AppNavbar from '../layout/AppNavbar.jsx';
 
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -7,7 +7,10 @@ const pad2 = (n) => String(n).padStart(2, '0');
 const parseApiTime = (timeStr) => {
   if (!timeStr) return { h: 0, m: 0 };
   const [h, m] = timeStr.split(':').map((v) => parseInt(v, 10));
-  return { h: Number.isFinite(h) ? h : 0, m: Number.isFinite(m) ? m : 0 };
+  return {
+    h: Number.isFinite(h) ? h : 0,
+    m: Number.isFinite(m) ? m : 0,
+  };
 };
 
 const formatTime = (timeStr) => {
@@ -19,20 +22,50 @@ const formatTime = (timeStr) => {
 
 const money = (cents) => `$${(Number(cents || 0) / 100).toFixed(2)}`;
 
-const statusBadgeClass = (value, kind = 'default') => {
-  const v = (value || '').toLowerCase();
+const formatDuration = (duration) => {
+  const n = Number(duration);
+  if (!Number.isFinite(n)) return '';
 
-  if (kind === 'payment') {
-    if (v === 'paid') return 'bg-green-100 text-green-800';
-    if (v === 'unpaid') return 'bg-yellow-100 text-yellow-800';
-    return 'bg-gray-100 text-gray-700';
+  // backend stores minutes
+  if (n >= 10) {
+    const hours = n / 60;
+    return `${hours % 1 === 0 ? hours.toFixed(0) : hours}h`;
   }
 
-  if (v === 'attended') return 'bg-green-100 text-green-800';
-  if (v === 'assigned') return 'bg-blue-100 text-blue-800';
-  if (v === 'missed') return 'bg-red-100 text-red-800';
-  if (v === 'cancelled') return 'bg-gray-100 text-gray-700';
-  return 'bg-gray-100 text-gray-700';
+  // fallback if backend sends hours directly
+  return `${n % 1 === 0 ? n.toFixed(0) : n}h`;
+};
+
+const statusBadgeClass = (value, kind = 'attendance') => {
+  const v = String(value || '').toLowerCase();
+
+  if (kind === 'payment') {
+    if (v === 'paid') return 'bg-green-100 text-green-800 border border-green-200';
+    if (v === 'unpaid') return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+    return 'bg-gray-100 text-gray-700 border border-gray-200';
+  }
+
+  if (v === 'attended') return 'bg-green-100 text-green-800 border border-green-200';
+  if (v === 'assigned') return 'bg-blue-100 text-blue-800 border border-blue-200';
+  if (v === 'missed') return 'bg-red-100 text-red-800 border border-red-200';
+  if (v === 'cancelled') return 'bg-gray-100 text-gray-700 border border-gray-200';
+  return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+};
+
+const formatAttendanceLabel = (status) => {
+  const v = String(status || '').toLowerCase();
+  if (v === 'attended') return 'Attended';
+  if (v === 'missed') return 'Missed';
+  if (v === 'cancelled') return 'Cancelled';
+  if (v === 'assigned') return 'Assigned';
+  return 'Pending';
+};
+
+const formatPaymentLabel = (status) => {
+  const v = String(status || '').toLowerCase();
+  if (v === 'paid') return 'Paid';
+  if (v === 'unpaid') return 'Unpaid';
+  return v || 'Unknown';
 };
 
 const ATTENDANCE_OPTIONS = ['assigned', 'attended', 'missed', 'cancelled'];
@@ -41,17 +74,22 @@ const PAYMENT_OPTIONS = ['unpaid', 'paid'];
 const LessonDetailPage = () => {
   const { lessonId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const backTo = location.state?.from || '/calendar';
   const token = useMemo(() => localStorage.getItem('token'), []);
 
   const [lesson, setLesson] = useState(null);
   const [role, setRole] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [lessonLoading, setLessonLoading] = useState(true);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [loadingLesson, setLoadingLesson] = useState(true);
   const [error, setError] = useState('');
   const [savingMap, setSavingMap] = useState({});
 
   useEffect(() => {
     const fetchMe = async () => {
+      setLoadingUser(true);
+      setError('');
+
       try {
         if (!token) {
           setError('No authentication token found. Please log in.');
@@ -59,7 +97,9 @@ const LessonDetailPage = () => {
         }
 
         const res = await fetch('/api/users/me', {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         });
 
         if (!res.ok) {
@@ -73,7 +113,7 @@ const LessonDetailPage = () => {
       } catch {
         setError('Network error occurred while loading user info');
       } finally {
-        setLoading(false);
+        setLoadingUser(false);
       }
     };
 
@@ -82,13 +122,15 @@ const LessonDetailPage = () => {
 
   useEffect(() => {
     const fetchLesson = async () => {
-      setLessonLoading(true);
+      setLoadingLesson(true);
 
       try {
         if (!token) return;
 
         const res = await fetch(`/api/lessons/${lessonId}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         });
 
         if (!res.ok) {
@@ -104,14 +146,97 @@ const LessonDetailPage = () => {
         setError('Network error occurred while loading lesson');
         setLesson(null);
       } finally {
-        setLessonLoading(false);
+        setLoadingLesson(false);
       }
     };
 
     fetchLesson();
   }, [lessonId, token]);
 
-  if (loading || lessonLoading) {
+  const setRowSaving = (studentId, field, value) => {
+    const key = `${studentId}-${field}`;
+    setSavingMap((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const handleStatusChange = async (studentId, field, value) => {
+    const previousLesson = lesson;
+
+    try {
+      setRowSaving(studentId, field, true);
+      setError('');
+
+      // optimistic UI update immediately
+      setLesson((prev) => ({
+        ...prev,
+        student_links: Array.isArray(prev?.student_links)
+          ? prev.student_links.map((link) => {
+              const matches =
+                link.student_id === studentId || link.student?.id === studentId;
+
+              if (!matches) return link;
+
+              return {
+                ...link,
+                [field]: value,
+              };
+            })
+          : [],
+      }));
+
+      const res = await fetch(`/api/lessons/${lessonId}/students/${studentId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ [field]: value }),
+      });
+
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || `Failed to update ${field}`);
+      }
+
+      // if backend returns updated row, merge it in
+      let updatedLink = null;
+      try {
+        updatedLink = await res.json();
+      } catch {
+        updatedLink = null;
+      }
+
+      if (updatedLink) {
+        setLesson((prev) => ({
+          ...prev,
+          student_links: Array.isArray(prev?.student_links)
+            ? prev.student_links.map((link) => {
+                const matches =
+                  link.student_id === studentId || link.student?.id === studentId;
+
+                if (!matches) return link;
+
+                return {
+                  ...link,
+                  ...updatedLink,
+                  [field]: value,
+                };
+              })
+            : [],
+        }));
+      }
+    } catch (err) {
+      // rollback if request failed
+      setLesson(previousLesson);
+      setError(err?.message || 'Failed to update lesson status');
+    } finally {
+      setRowSaving(studentId, field, false);
+    }
+  };
+
+  if (loadingUser || loadingLesson) {
     return (
       <div className="min-h-screen bg-gray-50">
         <AppNavbar title="Lesson Details" />
@@ -124,7 +249,7 @@ const LessonDetailPage = () => {
     );
   }
 
-  if (error) {
+  if (error && !lesson) {
     return (
       <div className="min-h-screen bg-gray-50">
         <AppNavbar title="Lesson Details" />
@@ -132,10 +257,10 @@ const LessonDetailPage = () => {
           <div className="mb-4">
             <button
               type="button"
-              onClick={() => navigate('/calendar')}
+              onClick={() => navigate(backTo)}
               className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm hover:bg-gray-50"
             >
-              ← Back to Calendar
+              ← Back
             </button>
           </div>
 
@@ -157,10 +282,10 @@ const LessonDetailPage = () => {
           <div className="mb-4">
             <button
               type="button"
-              onClick={() => navigate('/calendar')}
+              onClick={() => navigate(backTo)}
               className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm hover:bg-gray-50"
             >
-              ← Back to Calendar
+              ← Back
             </button>
           </div>
 
@@ -175,74 +300,65 @@ const LessonDetailPage = () => {
   const studentLinks = Array.isArray(lesson.student_links) ? lesson.student_links : [];
   const teachers = Array.isArray(lesson.teachers) ? lesson.teachers : [];
   const isTeacher = role === 'teacher';
-  const setRowSaving = (studentId, field, value) => {
-  const key = `${studentId}-${field}`;
-  setSavingMap((prev) => ({ ...prev, [key]: value }));
-};
-
-const handleStatusChange = async (studentId, field, value) => {
-try {
-    setRowSaving(studentId, field, true);
-    setError('');
-
-    const res = await fetch(`/api/lessons/${lesson.id}/students/${studentId}`, {
-    method: 'PATCH',
-    headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ [field]: value }),
-    });
-
-    if (!res.ok) {
-    const msg = await res.text();
-    throw new Error(msg || `Failed to update ${field}`);
-    }
-
-    const updatedLink = await res.json();
-
-    setLesson((prev) => ({
-    ...prev,
-    student_links: Array.isArray(prev?.student_links)
-        ? prev.student_links.map((link) =>
-            link.student_id === studentId ? { ...link, ...updatedLink } : link
-        )
-        : [],
-    }));
-} catch (err) {
-    setError(err?.message || 'Failed to update lesson status');
-} finally {
-    setRowSaving(studentId, field, false);
-}
-};
+  const durationText = formatDuration(lesson.duration);
 
   return (
     <div className="min-h-screen bg-gray-50">
       <AppNavbar title="Lesson Details" />
 
       <div className="max-w-4xl mx-auto p-6">
-        <div className="mb-4">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <button
             type="button"
-            onClick={() => navigate('/calendar')}
+            onClick={() => navigate(backTo)}
             className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm hover:bg-gray-50"
           >
-            ← Back to Calendar
+            ← Back
           </button>
+
+          {error && (
+            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {error}
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
             <div>
               <h1 className="text-2xl font-semibold text-gray-900">
                 {lesson.date} · {formatTime(lesson.time)}
               </h1>
               <p className="mt-1 text-gray-600">{lesson.location || 'Unknown location'}</p>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {lesson.subject && (
+                  <span className="inline-flex rounded-full bg-gray-100 border border-gray-200 px-3 py-1 text-sm text-gray-700">
+                    {lesson.subject}
+                  </span>
+                )}
+                {durationText && (
+                  <span className="inline-flex rounded-full bg-gray-100 border border-gray-200 px-3 py-1 text-sm text-gray-700">
+                    {durationText}
+                  </span>
+                )}
+              </div>
             </div>
 
-            <div className="text-right">
-              <div className="text-sm text-gray-500">Price</div>
-              <div className="text-xl font-semibold text-gray-900">{money(lesson.price)}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-[240px]">
+              <div className="rounded-lg border border-gray-200 p-4">
+                <div className="text-sm text-gray-500">Price (per hour)</div>
+                <div className="text-xl font-semibold text-gray-900">
+                  {money(lesson.price)}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 p-4">
+                <div className="text-sm text-gray-500">Organisation ID</div>
+                <div className="text-xl font-semibold text-gray-900">
+                  {lesson.organisation_id ?? '-'}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -266,111 +382,138 @@ try {
             </div>
 
             <div className="rounded-lg border border-gray-200 p-4">
-              <h2 className="text-sm font-medium text-gray-900">Summary</h2>
+              <h2 className="text-sm font-medium text-gray-900">Lesson Summary</h2>
               <div className="mt-3 space-y-2 text-sm text-gray-700">
                 <div>
-                  <span className="font-medium">Lesson ID:</span> {lesson.id}
+                  <span className="text-gray-500">Date:</span> {lesson.date || '-'}
                 </div>
                 <div>
-                  <span className="font-medium">Organisation ID:</span> {lesson.organisation_id}
+                  <span className="text-gray-500">Time:</span> {formatTime(lesson.time)}
                 </div>
                 <div>
-                  <span className="font-medium">Subject:</span> {lesson.subject}
+                  <span className="text-gray-500">Location:</span> {lesson.location || '-'}
                 </div>
                 <div>
-                  <span className="font-medium">Duration:</span> {lesson.duration}
+                  <span className="text-gray-500">Subject:</span> {lesson.subject || '-'}
                 </div>
                 <div>
-                  <span className="font-medium">Students:</span> {studentLinks.length}
+                  <span className="text-gray-500">Duration:</span> {durationText || '-'}
                 </div>
-                
               </div>
             </div>
           </div>
 
-          {isTeacher && (
-  <div className="mt-6 rounded-lg border border-gray-200 p-4">
-    <h2 className="text-sm font-medium text-gray-900">Students</h2>
+          <div className="mt-6 rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-sm font-medium text-gray-900">Students</h2>
+              <div className="text-sm text-gray-500">
+                {studentLinks.length} student{studentLinks.length === 1 ? '' : 's'}
+              </div>
+            </div>
 
-    <div className="mt-4 overflow-x-auto">
-      {studentLinks.length > 0 ? (
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 text-left text-gray-600">
-              <th className="py-2 pr-4 font-medium">Student</th>
-              <th className="py-2 pr-4 font-medium">Attendance</th>
-              <th className="py-2 pr-4 font-medium">Payment</th>
-            </tr>
-          </thead>
-          <tbody>
-            {studentLinks.map((link) => {
-              const student = link?.student;
-              const attendanceSaving = !!savingMap[`${link.student_id}-attendance_status`];
-              const paymentSaving = !!savingMap[`${link.student_id}-payment_status`];
+            <div className="mt-4 space-y-3">
+              {studentLinks.length > 0 ? (
+                studentLinks.map((link, index) => {
+                  const student = link?.student;
+                  const studentId = student?.id ?? link?.student_id ?? index;
+                  const attendance = link?.attendance_status || 'assigned';
+                  const payment = link?.payment_status || 'unpaid';
 
-              return (
-                <tr
-                  key={`${link.lesson_id}-${link.student_id}`}
-                  className="border-b border-gray-100"
-                >
-                  <td className="py-3 pr-4 text-gray-900">
-                    {student?.name || `Student #${student?.id ?? ''}`}
-                  </td>
+                  const savingAttendance = !!savingMap[`${studentId}-attendance_status`];
+                  const savingPayment = !!savingMap[`${studentId}-payment_status`];
 
-                  <td className="py-3 pr-4">
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={link.attendance_status || 'assigned'}
-                        onChange={(e) =>
-                          handleStatusChange(link.student_id, 'attendance_status', e.target.value)
-                        }
-                        disabled={attendanceSaving}
-                        className="rounded-md border border-gray-300 px-2 py-1 text-sm bg-white"
-                      >
-                        {ATTENDANCE_OPTIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                      {attendanceSaving && (
-                        <span className="text-xs text-gray-500">Saving...</span>
-                      )}
+                  return (
+                    <div
+                      key={studentId}
+                      className="rounded-lg border border-gray-200 bg-gray-50 p-4"
+                    >
+                      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {student?.name || `Student #${studentId}`}
+                          </div>
+
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(
+                                attendance,
+                                'attendance'
+                              )}`}
+                            >
+                              {formatAttendanceLabel(attendance)}
+                            </span>
+
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusBadgeClass(
+                                payment,
+                                'payment'
+                              )}`}
+                            >
+                              {formatPaymentLabel(payment)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {isTeacher ? (
+                          <div className="flex flex-col sm:flex-row gap-3">
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">
+                                Attendance
+                              </label>
+                              <select
+                                value={attendance}
+                                disabled={savingAttendance}
+                                onChange={(e) =>
+                                  handleStatusChange(
+                                    studentId,
+                                    'attendance_status',
+                                    e.target.value
+                                  )
+                                }
+                                className="rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                              >
+                                {ATTENDANCE_OPTIONS.map((option) => (
+                                  <option key={option} value={option}>
+                                    {formatAttendanceLabel(option)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">
+                                Payment
+                              </label>
+                              <select
+                                value={payment}
+                                disabled={savingPayment}
+                                onChange={(e) =>
+                                  handleStatusChange(
+                                    studentId,
+                                    'payment_status',
+                                    e.target.value
+                                  )
+                                }
+                                className="rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                              >
+                                {PAYMENT_OPTIONS.map((option) => (
+                                  <option key={option} value={option}>
+                                    {formatPaymentLabel(option)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                  </td>
-
-                  <td className="py-3 pr-4">
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={link.payment_status || 'unpaid'}
-                        onChange={(e) =>
-                          handleStatusChange(link.student_id, 'payment_status', e.target.value)
-                        }
-                        disabled={paymentSaving}
-                        className="rounded-md border border-gray-300 px-2 py-1 text-sm bg-white"
-                      >
-                        {PAYMENT_OPTIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                      {paymentSaving && (
-                        <span className="text-xs text-gray-500">Saving...</span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      ) : (
-        <div className="text-sm text-gray-500">No students assigned.</div>
-      )}
-    </div>
-  </div>
-)}
+                  );
+                })
+              ) : (
+                <div className="text-sm text-gray-500">No students assigned.</div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

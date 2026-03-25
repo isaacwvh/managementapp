@@ -119,7 +119,11 @@ const LessonRow = ({ lesson, navigate, isPast }) => {
   return (
     <button
       type="button"
-      onClick={() => navigate(`/lessons/${lesson.id}`)}
+      onClick={() =>
+  navigate(`/lessons/${lesson.id}`, {
+    state: { from: '/manage-lessons' },
+  })
+}
       className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 hover:bg-gray-50 transition"
     >
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
