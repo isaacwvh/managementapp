@@ -300,6 +300,7 @@ const LessonDetailPage = () => {
   const studentLinks = Array.isArray(lesson.student_links) ? lesson.student_links : [];
   const teachers = Array.isArray(lesson.teachers) ? lesson.teachers : [];
   const isTeacher = role === 'teacher';
+  const isAdmin = role === 'admin';
   const durationText = formatDuration(lesson.duration);
 
   return (
@@ -454,7 +455,7 @@ const LessonDetailPage = () => {
                           </div>
                         </div>
 
-                        {isTeacher ? (
+                        {(isTeacher || isAdmin) ? (
                           <div className="flex flex-col sm:flex-row gap-3">
                             <div>
                               <label className="block text-xs text-gray-500 mb-1">

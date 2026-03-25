@@ -14,6 +14,7 @@ import ManageStudentLessonsPage from './components/pages/ManageStudentLessonsPag
 import StudentHomePage from './components/pages/StudentHomePage.jsx';
 import ProfilePage from './components/pages/ProfilePage.jsx';
 import AdminManageStudentsPage from './components/pages/AdminManageStudentsPage.jsx';
+import AdminManageStudentPage from './components/pages/AdminManageStudentPage.jsx';
 
 function App() {
   return (
@@ -60,7 +61,7 @@ function App() {
           <Route path="/student" element={<StudentHomePage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/admin/students" element={<AdminManageStudentsPage />} />
-          {/* <Route path="/admin/students/:studentId" element={<AdminManageStudentPage />} /> */}
+          <Route path="/admin/students/:studentId" element={<AdminManageStudentPage />} />
         </Routes>
       </Router>
     </AuthProvider>
