@@ -99,7 +99,7 @@ const statusStyles = (status) => {
     return 'bg-red-100 text-red-800 border border-red-200';
   }
   if (status === 'cancelled') {
-    return 'bg-red-100 text-red-800 border border-red-200';
+    return 'bg-gray-100 text-gray-700 border border-gray-200';
   }
   return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
   

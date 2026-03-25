@@ -1,23 +1,207 @@
-// src/components/pages/HomePage.jsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppNavbar from '../layout/AppNavbar.jsx';
 
+const pad2 = (n) => String(n).padStart(2, '0');
+
+const parseApiDate = (dateStr) => {
+  if (!dateStr) return null;
+  const [y, m, d] = dateStr.split('-').map((v) => parseInt(v, 10));
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+};
+
+const parseApiTime = (timeStr) => {
+  if (!timeStr) return { h: 0, m: 0 };
+  const [h, m] = timeStr.split(':').map((v) => parseInt(v, 10));
+  return {
+    h: Number.isFinite(h) ? h : 0,
+    m: Number.isFinite(m) ? m : 0,
+  };
+};
+
+const lessonDateTime = (lesson) => {
+  const d = parseApiDate(lesson?.date);
+  const t = parseApiTime(lesson?.time);
+  if (!d) return new Date(0);
+
+  return new Date(
+    d.getFullYear(),
+    d.getMonth(),
+    d.getDate(),
+    t.h,
+    t.m,
+    0,
+    0
+  );
+};
+
+const formatTime = (timeStr) => {
+  const { h, m } = parseApiTime(timeStr);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hr12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hr12}:${pad2(m)} ${ampm}`;
+};
+
+const formatDate = (dateStr) => {
+  const d = parseApiDate(dateStr);
+  if (!d) return dateStr || '';
+  return d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
+
+const formatPrice = (price) => {
+  const n = Number(price);
+  if (!Number.isFinite(n)) return '$0.00';
+  return `$${(n / 100).toFixed(2)}`;
+};
+
+const formatDuration = (duration) => {
+  const n = Number(duration);
+  if (!Number.isFinite(n)) return '';
+
+  if (n >= 10) {
+    const hours = n / 60;
+    return `${hours % 1 === 0 ? hours.toFixed(0) : hours}h`;
+  }
+
+  return `${n % 1 === 0 ? n.toFixed(0) : n}h`;
+};
+
+const getStudentLinks = (lesson) => {
+  if (!Array.isArray(lesson?.student_links)) return [];
+  return lesson.student_links;
+};
+
+const getStudentName = (link, index) => {
+  return link?.student?.name || `Student ${index + 1}`;
+};
+
+const getAttendanceStatus = (link) => {
+  return String(
+    link?.attendance_status ??
+      link?.attendance ??
+      link?.status ??
+      'assigned'
+  )
+    .trim()
+    .toLowerCase();
+};
+
+const statusBadgeClass = (status) => {
+  if (status === 'attended') {
+    return 'bg-green-100 text-green-800 border border-green-200';
+  }
+  if (status === 'missed') {
+    return 'bg-red-100 text-red-800 border border-red-200';
+  }
+  if (status === 'cancelled') {
+    return 'bg-gray-100 text-gray-700 border border-gray-200';
+  }
+  if (status === 'assigned') {
+    return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+  }
+  return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+};
+
+const formatAttendanceLabel = (status) => {
+  if (status === 'attended') return 'Attended';
+  if (status === 'missed') return 'Missed';
+  if (status === 'cancelled') return 'Cancelled';
+  if (status === 'assigned') return 'Pending';
+  return 'Pending';
+};
+
+const LessonPreviewCard = ({ lesson, navigate }) => {
+  const students = getStudentLinks(lesson);
+
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        navigate(`/lessons/${lesson.id}`, {
+          state: { from: '/' },
+        })
+      }
+      className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 hover:bg-gray-50 transition"
+    >
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-sm font-semibold text-gray-900">
+              {formatDate(lesson.date)}
+            </span>
+            <span className="text-sm text-gray-700">{formatTime(lesson.time)}</span>
+            <span className="text-sm text-gray-500">·</span>
+            <span className="text-sm text-gray-700">{lesson.subject || 'No subject'}</span>
+          </div>
+
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600">
+            <span>{lesson.location || 'Unknown location'}</span>
+            <span>·</span>
+            <span>{formatDuration(lesson.duration) || 'No duration'}</span>
+            <span>·</span>
+            <span>{formatPrice(lesson.price)}</span>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {students.length > 0 ? (
+              students.map((link, index) => {
+                const status = getAttendanceStatus(link);
+                return (
+                  <div
+                    key={`${lesson.id}-${link?.student?.id || link?.student_id || index}`}
+                    className="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1"
+                  >
+                    <span className="text-xs text-gray-700">
+                      {getStudentName(link, index)}
+                    </span>
+                    <span
+                      className={`text-[11px] font-medium rounded-full px-2 py-0.5 ${statusBadgeClass(
+                        status
+                      )}`}
+                    >
+                      {formatAttendanceLabel(status)}
+                    </span>
+                  </div>
+                );
+              })
+            ) : (
+              <span className="text-xs text-gray-400">No students</span>
+            )}
+          </div>
+        </div>
+
+        <div className="shrink-0 text-xs text-gray-400 whitespace-nowrap">
+          View details →
+        </div>
+      </div>
+    </button>
+  );
+};
+
 export const HomePage = () => {
   const navigate = useNavigate();
+  const token = useMemo(() => localStorage.getItem('token'), []);
 
   const [userInfo, setUserInfo] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [lessons, setLessons] = useState([]);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [loadingLessons, setLoadingLessons] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchUserInfo = async () => {
-      try {
-        const token = localStorage.getItem('token');
+      setLoadingUser(true);
+      setError('');
 
+      try {
         if (!token) {
           setError('No authentication token found. Please log in.');
-          setLoading(false);
           return;
         }
 
@@ -42,31 +226,131 @@ export const HomePage = () => {
           }
         }
       } catch {
-        setError('Network error occurred');
+        setError('Network error occurred while loading user info');
       } finally {
-        setLoading(false);
+        setLoadingUser(false);
       }
     };
 
     fetchUserInfo();
-  }, []);
+  }, [token]);
+
+  useEffect(() => {
+    const fetchLessons = async () => {
+      setLoadingLessons(true);
+
+      try {
+        if (!token) return;
+        if ((userInfo?.role || '').toLowerCase() !== 'teacher') {
+          setLessons([]);
+          return;
+        }
+
+        const response = await fetch('/api/lessons/my-lessons', {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          setError(`Failed to fetch lessons: ${errorText}`);
+          setLessons([]);
+          return;
+        }
+
+        const data = await response.json();
+        const normalized = Array.isArray(data) ? data : [];
+        normalized.sort((a, b) => lessonDateTime(a) - lessonDateTime(b));
+        setLessons(normalized);
+      } catch {
+        setError('Network error occurred while loading lessons');
+        setLessons([]);
+      } finally {
+        setLoadingLessons(false);
+      }
+    };
+
+    if (userInfo) {
+      fetchLessons();
+    }
+  }, [token, userInfo]);
 
   const role = useMemo(() => (userInfo?.role || '').toLowerCase(), [userInfo]);
   const isTeacher = role === 'teacher';
 
-  const handleCreateLesson = () => navigate('/create-lesson');
-  const handleViewCalendar = () => navigate('/calendar');
+  const upcomingLessons = useMemo(() => {
+    const now = new Date();
 
-  if (loading) {
+    return lessons
+      .filter((lesson) => lessonDateTime(lesson) > now)
+      .sort((a, b) => lessonDateTime(a) - lessonDateTime(b))
+      .slice(0, 6);
+  }, [lessons]);
+
+  const notifications = useMemo(() => {
+    const now = new Date();
+    const items = [];
+
+    lessons.forEach((lesson) => {
+      const isPast = lessonDateTime(lesson) <= now;
+      if (!isPast) return;
+
+      const studentLinks = getStudentLinks(lesson);
+      const pendingStudents = studentLinks.filter((link) => {
+        const status = getAttendanceStatus(link);
+        return status === 'assigned' || status === 'pending' || !status;
+      });
+
+      if (pendingStudents.length > 0) {
+        items.push({
+          type: 'pending-status',
+          lesson,
+          pendingCount: pendingStudents.length,
+        });
+      }
+    });
+
+    return items.sort((a, b) => lessonDateTime(b.lesson) - lessonDateTime(a.lesson));
+  }, [lessons]);
+
+  if (loadingUser) {
     return (
       <div className="min-h-screen bg-gray-50">
         <AppNavbar title="Dashboard" />
-        <div className="flex items-center justify-center py-24">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading...</p>
+        <div className="max-w-6xl mx-auto p-6">
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center justify-center py-16 text-gray-600">
+              Loading...
+            </div>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (!isTeacher) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <AppNavbar title="Dashboard" />
+        <main className="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+          <div className="bg-white rounded-xl shadow-sm p-8">
+            {error ? (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+                {error}
+              </div>
+            ) : (
+              <>
+                <h1 className="text-2xl font-light text-gray-900">Welcome</h1>
+                <p className="mt-2 text-gray-600">
+                  This home page is currently set up for teachers.
+                </p>
+              </>
+            )}
+          </div>
+        </main>
       </div>
     );
   }
@@ -75,18 +359,33 @@ export const HomePage = () => {
     <div className="min-h-screen bg-gray-50">
       <AppNavbar title="Dashboard" />
 
-      <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        {/* User Information Card */}
+      <main className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+            {error}
+          </div>
+        )}
+
         <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-light text-gray-900">Profile Information</h2>
-            <div className="flex items-center space-x-3">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-light text-gray-900">
+                Welcome{userInfo?.name ? `, ${userInfo.name}` : ''}
+              </h1>
+              <p className="mt-2 text-sm text-gray-600">
+                Here’s your teaching dashboard and what needs attention.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
               <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800 capitalize">
                 {role || 'unknown'}
               </span>
               <span
                 className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                  userInfo?.is_verified ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                  userInfo?.is_verified
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-yellow-100 text-yellow-800'
                 }`}
               >
                 {userInfo?.is_verified ? 'Verified' : 'Unverified'}
@@ -94,135 +393,144 @@ export const HomePage = () => {
             </div>
           </div>
 
-          {error ? (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-red-600">{error}</p>
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-lg border border-gray-200 p-4">
+              <div className="text-sm text-gray-500">Name</div>
+              <div className="mt-1 text-lg text-gray-900">{userInfo?.name || '-'}</div>
             </div>
-          ) : userInfo ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                  <p className="text-lg text-gray-900">{userInfo.name}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <p className="text-lg text-gray-900">{userInfo.email}</p>
-                </div>
-              </div>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                  <p className="text-lg text-gray-900 capitalize">{userInfo.role}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">User ID</label>
-                  <p className="text-lg text-gray-900">#{userInfo.id}</p>
-                </div>
-                {userInfo.organisation_id && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Organisation ID
-                    </label>
-                    <p className="text-lg text-gray-900">#{userInfo.organisation_id}</p>
-                  </div>
-                )}
+            <div className="rounded-lg border border-gray-200 p-4">
+              <div className="text-sm text-gray-500">Email</div>
+              <div className="mt-1 text-lg text-gray-900 break-all">
+                {userInfo?.email || '-'}
               </div>
             </div>
-          ) : null}
-        </div>
 
-        {/* Quick Actions (role-based) */}
-        <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
-          <h2 className="text-2xl font-light text-gray-900 mb-6">Quick Actions</h2>
-          <div className="flex flex-col sm:flex-row gap-4">
-            {isTeacher && (
-              <button
-                onClick={handleCreateLesson}
-                className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center"
-              >
-                <span className="mr-2">📝</span>
-                Create Lesson
-              </button>
-            )}
+            <div className="rounded-lg border border-gray-200 p-4">
+              <div className="text-sm text-gray-500">Organisation</div>
+              <div className="mt-1 text-lg text-gray-900">
+                {userInfo?.organisation_id ? `#${userInfo.organisation_id}` : '-'}
+              </div>
+            </div>
+          </div>
+
+          {/* <div className="mt-6 flex flex-wrap gap-3">
             <button
-              onClick={handleViewCalendar}
-              className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center"
+              onClick={() => navigate('/create-lesson')}
+              className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-800"
             >
-              <span className="mr-2">📅</span>
-              View Calendar
+              Create Lesson
             </button>
-          </div>
+            <button
+              onClick={() => navigate('/manage-lessons')}
+              className="px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm hover:bg-gray-50"
+            >
+              Manage Lessons
+            </button>
+            <button
+              onClick={() => navigate('/analytics')}
+              className="px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm hover:bg-gray-50"
+            >
+              View Analytics
+            </button>
+          </div> */}
         </div>
 
-        {/* Dashboard Overview (unchanged) */}
-        <div className="bg-white rounded-xl shadow-sm p-8">
-          <h2 className="text-2xl font-light text-gray-900 mb-6">Dashboard Overview</h2>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+          <section className="bg-white rounded-xl shadow-sm p-8">
+            <div className="flex items-center justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-2xl font-light text-gray-900">Upcoming Lessons</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Your next scheduled lessons
+                </p>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                    <span className="text-white text-sm font-bold">📊</span>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <h3 className="text-lg font-medium text-gray-900">Analytics</h3>
-                  <p className="text-sm text-gray-600">View your data insights</p>
-                </div>
+              <button
+                onClick={() => navigate('/manage-lessons')}
+                className="text-sm text-gray-600 hover:text-gray-900"
+              >
+                View all
+              </button>
+            </div>
+
+            {loadingLessons ? (
+              <div className="text-sm text-gray-500">Loading lessons...</div>
+            ) : upcomingLessons.length === 0 ? (
+              <div className="text-sm text-gray-500">No upcoming lessons.</div>
+            ) : (
+              <div className="space-y-3">
+                {upcomingLessons.map((lesson) => (
+                  <LessonPreviewCard
+                    key={lesson.id}
+                    lesson={lesson}
+                    navigate={navigate}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="bg-white rounded-xl shadow-sm p-8">
+            <div className="flex items-center justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-2xl font-light text-gray-900">Notifications</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Lessons that need your attention
+                </p>
+              </div>
+
+              <div className="text-sm text-gray-500">
+                {notifications.length} item{notifications.length === 1 ? '' : 's'}
               </div>
             </div>
 
-            <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
-                    <span className="text-white text-sm font-bold">⚙️</span>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <h3 className="text-lg font-medium text-gray-900">Settings</h3>
-                  <p className="text-sm text-gray-600">Manage your preferences</p>
-                </div>
-              </div>
-            </div>
+            {loadingLessons ? (
+              <div className="text-sm text-gray-500">Loading notifications...</div>
+            ) : notifications.length === 0 ? (
+              <div className="text-sm text-gray-500">No notifications right now.</div>
+            ) : (
+              <div className="space-y-3">
+                {notifications.map((item, index) => (
+                  <button
+                    key={`${item.lesson.id}-${index}`}
+                    type="button"
+                    onClick={() =>
+                      navigate(`/lessons/${item.lesson.id}`, {
+                        state: { from: '/' },
+                      })
+                    }
+                    className="w-full text-left rounded-xl border border-orange-200 bg-orange-50 p-4 hover:bg-orange-100 transition"
+                  >
+                    <div className="flex flex-col gap-2">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span className="text-sm font-semibold text-gray-900">
+                          {formatDate(item.lesson.date)}
+                        </span>
+                        <span className="text-sm text-gray-700">
+                          {formatTime(item.lesson.time)}
+                        </span>
+                        <span className="text-sm text-gray-500">·</span>
+                        <span className="text-sm text-gray-700">
+                          {item.lesson.subject || 'No subject'}
+                        </span>
+                      </div>
 
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
-                    <span className="text-white text-sm font-bold">👥</span>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <h3 className="text-lg font-medium text-gray-900">Team</h3>
-                  <p className="text-sm text-gray-600">Collaborate with others</p>
-                </div>
-              </div>
-            </div>
-          </div>
+                      <div className="text-sm text-orange-900">
+                        {item.pendingCount} student
+                        {item.pendingCount === 1 ? '' : 's'} still need attendance
+                        status updated.
+                      </div>
 
-          <div className="border-t pt-8">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Activity</h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                  <span className="text-sm text-gray-700">Successfully logged in</span>
-                </div>
-                <span className="text-xs text-gray-500">Just now</span>
+                      <div className="text-xs text-gray-600">
+                        {item.lesson.location || 'Unknown location'}
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
-              <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full mr-3"></div>
-                  <span className="text-sm text-gray-700">Profile information loaded</span>
-                </div>
-                <span className="text-xs text-gray-500">Earlier today</span>
-              </div>
-            </div>
-          </div>
+            )}
+          </section>
         </div>
       </main>
     </div>
