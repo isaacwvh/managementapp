@@ -10,6 +10,7 @@ export const AppNavbar = ({
   showCreateLesson = true,
   showManageLesson = true,
   showAnalytics = true,
+  showManageStudentLesson = true
 }) => {
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -40,6 +41,7 @@ export const AppNavbar = ({
 
   const role = useMemo(() => (userInfo?.role || '').toLowerCase(), [userInfo]);
   const isTeacher = role === 'teacher';
+  const isStudent = role === 'student';
 
   const onNav = (to) => {
     if (location.pathname !== to) navigate(to);
@@ -76,6 +78,15 @@ export const AppNavbar = ({
             {showManageLesson && isTeacher && (
               <button
                 onClick={() => onNav('/manage-lessons')}
+                className="text-sm font-medium text-gray-700 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Manage Lessons
+              </button>
+            )}
+
+            {showManageStudentLesson && isStudent && (
+              <button
+                onClick={() => onNav('/student/manage-lessons')}
                 className="text-sm font-medium text-gray-700 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 Manage Lessons

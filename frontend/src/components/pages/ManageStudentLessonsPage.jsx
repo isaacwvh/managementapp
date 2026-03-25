@@ -24,6 +24,7 @@ const lessonDateTime = (lesson) => {
   const d = parseApiDate(lesson?.date);
   const t = parseApiTime(lesson?.time);
   if (!d) return new Date(0);
+
   return new Date(
     d.getFullYear(),
     d.getMonth(),
@@ -53,6 +54,15 @@ const formatDate = (dateStr) => {
   });
 };
 
+const formatMonthYear = (dateStr) => {
+  const d = parseApiDate(dateStr);
+  if (!d) return 'Unknown Month';
+  return d.toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric',
+  });
+};
+
 const formatDuration = (duration) => {
   const n = Number(duration);
   if (!Number.isFinite(n)) return '';
@@ -71,24 +81,16 @@ const formatPrice = (price) => {
   return `$${(n / 100).toFixed(2)}`;
 };
 
-const getStudents = (lesson) => {
-  if (!Array.isArray(lesson?.student_links)) return [];
-  return lesson.student_links
-    .map((link) => ({
-      ...link,
-      student: link?.student || null,
-    }))
-    .filter((link) => link.student);
+const normalizeStatus = (raw) => {
+  return String(raw || '').trim().toLowerCase();
 };
 
-const getAttendanceStatus = (studentLink) => {
-  const raw =
-    studentLink?.attendance ??
-    studentLink?.attendance_status ??
-    studentLink?.status ??
-    '';
-
-  return String(raw).trim().toLowerCase();
+const statusLabel = (status) => {
+  if (status === 'assigned') return 'Assigned';
+  if (status === 'attended') return 'Attended';
+  if (status === 'missed') return 'Missed';
+  if (status === 'cancelled') return 'Cancelled';
+  return 'Pending';
 };
 
 const statusStyles = (status) => {
@@ -101,29 +103,96 @@ const statusStyles = (status) => {
   if (status === 'cancelled') {
     return 'bg-gray-100 text-gray-700 border border-gray-200';
   }
+  if (status === 'assigned') {
+    return 'bg-blue-100 text-blue-800 border border-blue-200';
+  }
   return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
-  
 };
 
-const LessonRow = ({ lesson, navigate, isPast }) => {
-  const students = getStudents(lesson);
+const paidStyles = (paid) => {
+  return paid
+    ? 'bg-green-100 text-green-800 border border-green-200'
+    : 'bg-orange-100 text-orange-800 border border-orange-200';
+};
+
+const isTruthyPaid = (value) => {
+  if (value === true) return true;
+  if (value === false) return false;
+
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase();
+
+  return normalized === 'paid' || normalized === 'true' || normalized === 'yes' || normalized === '1';
+};
+
+const getCurrentStudentLink = (lesson, currentUserId) => {
+  if (!Array.isArray(lesson?.student_links)) return null;
+
+  return (
+    lesson.student_links.find(
+      (link) =>
+        String(link?.student_id) === String(currentUserId) ||
+        String(link?.student?.id) === String(currentUserId)
+    ) || null
+  );
+};
+
+const getStudentLessonStatus = (lesson, currentUserId) => {
+  const link = getCurrentStudentLink(lesson, currentUserId);
+  return normalizeStatus(
+    link?.attendance ??
+      link?.attendance_status ??
+      link?.status
+  );
+};
+
+const getStudentPaidStatus = (lesson, currentUserId) => {
+  const link = getCurrentStudentLink(lesson, currentUserId);
+
+  return isTruthyPaid(
+    link?.is_paid ??
+      link?.paid ??
+      link?.payment_status
+  );
+};
+
+const isPastLesson = (lesson) => lessonDateTime(lesson) < new Date();
+
+const isSameMonthAsNow = (lesson) => {
+  const d = lessonDateTime(lesson);
+  const now = new Date();
+
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth()
+  );
+};
+
+const shouldShowOverdueWarning = (lesson, currentUserId) => {
+  const past = isPastLesson(lesson);
+  const paid = getStudentPaidStatus(lesson, currentUserId);
+  const sameMonth = isSameMonthAsNow(lesson);
+
+  return past && !paid && !sameMonth;
+};
+
+const LessonRow = ({ lesson, navigate, currentUserId }) => {
   const subject = lesson?.subject || 'No subject';
   const location = lesson?.location || 'Unknown location';
   const duration = formatDuration(lesson?.duration);
-
-  const hasPendingStudents = students.some((link) => {
-    const status = getAttendanceStatus(link);
-    return status !== 'attended' && status !== 'missed' && status !== 'cancelled';
-  });
+  const status = getStudentLessonStatus(lesson, currentUserId);
+  const isPaid = getStudentPaidStatus(lesson, currentUserId);
+  const overdueWarning = shouldShowOverdueWarning(lesson, currentUserId);
 
   return (
     <button
       type="button"
       onClick={() =>
-  navigate(`/lessons/${lesson.id}`, {
-    state: { from: '/manage-lessons' },
-  })
-}
+        navigate(`/lessons/${lesson.id}`, {
+          state: { from: '/student/manage-lessons' },
+        })
+      }
       className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 hover:bg-gray-50 transition"
     >
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
@@ -147,43 +216,24 @@ const LessonRow = ({ lesson, navigate, isPast }) => {
             <span>{formatPrice(lesson.price)}</span>
           </div>
 
-          {isPast && hasPendingStudents && (
-            <div className="mt-2 inline-flex items-center rounded-lg bg-orange-50 border border-orange-200 px-3 py-1 text-xs font-medium text-orange-800">
-              Attendance still pending for one or more students — update their status
+          {overdueWarning && (
+            <div className="mt-2 inline-flex items-center rounded-lg bg-red-50 border border-red-200 px-3 py-1 text-xs font-medium text-red-800">
+              Warning: this past lesson is still unpaid from a previous month
             </div>
           )}
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {students.length === 0 ? (
-              <span className="text-xs text-gray-400">No students</span>
-            ) : (
-              students.map((link, idx) => {
-                const name = link?.student?.name || `Student ${idx + 1}`;
-                const status = getAttendanceStatus(link);
+            <span
+              className={`text-[11px] font-medium rounded-full px-2.5 py-1 ${statusStyles(status)}`}
+            >
+              {statusLabel(status)}
+            </span>
 
-                return (
-                  <div
-                    key={`${lesson.id}-${link?.student?.id || idx}`}
-                    className="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1"
-                  >
-                    <span className="text-xs text-gray-700">{name}</span>
-                    <span
-                      className={`text-[11px] font-medium rounded-full px-2 py-0.5 ${statusStyles(
-                        status
-                      )}`}
-                    >
-                      {status === 'attended'
-                        ? 'Attended'
-                        : status === 'missed'
-                        ? 'Missed'
-                        : status === 'cancelled'
-                        ? 'Cancelled'
-                        : 'Pending'}
-                    </span>
-                  </div>
-                );
-              })
-            )}
+            <span
+              className={`text-[11px] font-medium rounded-full px-2.5 py-1 ${paidStyles(isPaid)}`}
+            >
+              {isPaid ? 'Paid' : 'Unpaid'}
+            </span>
           </div>
         </div>
 
@@ -195,7 +245,7 @@ const LessonRow = ({ lesson, navigate, isPast }) => {
   );
 };
 
-const ManageLessonsPage = () => {
+const ManageStudentLessonsPage = () => {
   const [userInfo, setUserInfo] = useState(null);
   const [role, setRole] = useState('');
   const [lessons, setLessons] = useState([]);
@@ -204,10 +254,10 @@ const ManageLessonsPage = () => {
   const [error, setError] = useState('');
 
   const [search, setSearch] = useState('');
-  const [studentFilter, setStudentFilter] = useState('');
   const [locationFilter, setLocationFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
-  const [priceFilter, setPriceFilter] = useState('all');
+  const [paymentFilter, setPaymentFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const token = useMemo(() => localStorage.getItem('token'), []);
   const navigate = useNavigate();
@@ -253,12 +303,12 @@ const ManageLessonsPage = () => {
       try {
         if (!token || !role) return;
 
-        if (role !== 'teacher') {
+        if (role !== 'student') {
           setLessons([]);
           return;
         }
 
-        const res = await fetch('/api/lessons/my-lessons', {
+        const res = await fetch('/api/lessons/my-lessons-student', {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -270,8 +320,7 @@ const ManageLessonsPage = () => {
         }
 
         const data = await res.json();
-        const normalized = Array.isArray(data) ? data : [];
-        setLessons(normalized);
+        setLessons(Array.isArray(data) ? data : []);
       } catch {
         setError('Network error occurred while loading lessons');
         setLessons([]);
@@ -283,48 +332,26 @@ const ManageLessonsPage = () => {
     fetchLessons();
   }, [role, token]);
 
-  const allStudentNames = useMemo(() => {
-    const set = new Set();
-
-    lessons.forEach((lesson) => {
-      getStudents(lesson).forEach((link) => {
-        const name = link?.student?.name?.trim();
-        if (name) set.add(name);
-      });
-    });
-
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [lessons]);
-
   const filteredLessons = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const studentQ = studentFilter.trim().toLowerCase();
     const locationQ = locationFilter.trim().toLowerCase();
 
     return lessons.filter((lesson) => {
-      const students = getStudents(lesson);
-      const studentNames = students
-        .map((link) => link?.student?.name || '')
-        .filter(Boolean);
+      const status = getStudentLessonStatus(lesson, userInfo?.id);
+      const isPaid = getStudentPaidStatus(lesson, userInfo?.id);
 
       const haystack = [
         lesson?.subject || '',
         lesson?.location || '',
         lesson?.date || '',
         lesson?.time || '',
-        ...studentNames,
+        status,
+        isPaid ? 'paid' : 'unpaid',
       ]
         .join(' ')
         .toLowerCase();
 
       if (q && !haystack.includes(q)) return false;
-
-      if (
-        studentQ &&
-        !studentNames.some((name) => name.toLowerCase().includes(studentQ))
-      ) {
-        return false;
-      }
 
       if (
         locationQ &&
@@ -335,20 +362,17 @@ const ManageLessonsPage = () => {
 
       if (dateFilter && lesson?.date !== dateFilter) return false;
 
-      if (priceFilter !== 'all') {
-        const rawPrice = Number(lesson?.price || 0);
-        if (priceFilter === 'lt50' && rawPrice >= 5000) return false;
-        if (priceFilter === '50to100' && (rawPrice < 5000 || rawPrice > 10000)) return false;
-        if (priceFilter === 'gt100' && rawPrice <= 10000) return false;
-      }
+      if (paymentFilter === 'paid' && !isPaid) return false;
+      if (paymentFilter === 'unpaid' && isPaid) return false;
+
+      if (statusFilter !== 'all' && status !== statusFilter) return false;
 
       return true;
     });
-  }, [lessons, search, studentFilter, locationFilter, dateFilter, priceFilter]);
+  }, [lessons, search, locationFilter, dateFilter, paymentFilter, statusFilter, userInfo?.id]);
 
-  const { upcomingLessons, pastLessons } = useMemo(() => {
+  const { upcomingLessons, pastLessonsByMonth } = useMemo(() => {
     const now = new Date();
-
     const upcoming = [];
     const past = [];
 
@@ -364,16 +388,27 @@ const ManageLessonsPage = () => {
     upcoming.sort((a, b) => lessonDateTime(a) - lessonDateTime(b));
     past.sort((a, b) => lessonDateTime(b) - lessonDateTime(a));
 
+    const grouped = past.reduce((acc, lesson) => {
+      const key = formatMonthYear(lesson.date);
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(lesson);
+      return acc;
+    }, {});
+
     return {
       upcomingLessons: upcoming,
-      pastLessons: past,
+      pastLessonsByMonth: grouped,
     };
   }, [filteredLessons]);
+
+  const pastMonthKeys = useMemo(() => {
+    return Object.keys(pastLessonsByMonth);
+  }, [pastLessonsByMonth]);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <AppNavbar title="Manage Lessons" />
+        <AppNavbar title="My Lessons" />
         <div className="max-w-6xl mx-auto p-6">
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center justify-center py-16 text-gray-600">
@@ -385,14 +420,14 @@ const ManageLessonsPage = () => {
     );
   }
 
-  if (role !== 'teacher') {
+  if (role !== 'student') {
     return (
       <div className="min-h-screen bg-gray-50">
-        <AppNavbar title="Manage Lessons" />
+        <AppNavbar title="My Lessons" />
         <div className="max-w-4xl mx-auto p-6">
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-              This page is only available to teachers.
+              This page is only available to students.
             </div>
           </div>
         </div>
@@ -402,23 +437,21 @@ const ManageLessonsPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <AppNavbar title="Manage Lessons" />
+      <AppNavbar title="My Lessons" />
 
       <div className="max-w-6xl mx-auto p-6">
         <div className="bg-white rounded-xl shadow-sm p-6">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-light text-gray-900">Manage Lessons</h1>
+              <h1 className="text-2xl font-light text-gray-900">My Lessons</h1>
               <p className="text-sm text-gray-600 mt-1">
                 {userInfo?.name ? `${userInfo.name} · ` : ''}
-                Teacher
+                Student
               </p>
             </div>
 
             <div className="text-sm text-gray-500">
-              {lessonsLoading
-                ? 'Loading lessons...'
-                : `${filteredLessons.length} lessons`}
+              {lessonsLoading ? 'Loading lessons...' : `${filteredLessons.length} lessons`}
             </div>
           </div>
 
@@ -435,30 +468,11 @@ const ManageLessonsPage = () => {
               </label>
               <input
                 type="text"
-                placeholder="Search by student, subject, date, time, location..."
+                placeholder="Search by subject, date, time, location, status..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
               />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Student
-              </label>
-              <input
-                list="student-names"
-                type="text"
-                placeholder="Filter by student"
-                value={studentFilter}
-                onChange={(e) => setStudentFilter(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
-              />
-              <datalist id="student-names">
-                {allStudentNames.map((name) => (
-                  <option key={name} value={name} />
-                ))}
-              </datalist>
             </div>
 
             <div>
@@ -475,17 +489,33 @@ const ManageLessonsPage = () => {
 
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
-                Price
+                Payment
               </label>
               <select
-                value={priceFilter}
-                onChange={(e) => setPriceFilter(e.target.value)}
+                value={paymentFilter}
+                onChange={(e) => setPaymentFilter(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-200"
               >
-                <option value="all">All prices</option>
-                <option value="lt50">Under $50</option>
-                <option value="50to100">$50 - $100</option>
-                <option value="gt100">Over $100</option>
+                <option value="all">All</option>
+                <option value="paid">Paid</option>
+                <option value="unpaid">Unpaid</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Status
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-200"
+              >
+                <option value="all">All</option>
+                <option value="assigned">Assigned</option>
+                <option value="attended">Attended</option>
+                <option value="missed">Missed</option>
+                <option value="cancelled">Cancelled</option>
               </select>
             </div>
           </div>
@@ -509,10 +539,10 @@ const ManageLessonsPage = () => {
                 type="button"
                 onClick={() => {
                   setSearch('');
-                  setStudentFilter('');
                   setLocationFilter('');
                   setDateFilter('');
-                  setPriceFilter('all');
+                  setPaymentFilter('all');
+                  setStatusFilter('all');
                 }}
                 className="px-4 py-2 rounded-lg border border-gray-200 text-sm hover:bg-gray-50"
               >
@@ -537,7 +567,7 @@ const ManageLessonsPage = () => {
                     key={lesson.id}
                     lesson={lesson}
                     navigate={navigate}
-                    isPast={false}
+                    currentUserId={userInfo?.id}
                   />
                 ))}
               </div>
@@ -546,22 +576,32 @@ const ManageLessonsPage = () => {
 
           <div className="mt-10 border-t pt-6">
             <h2 className="text-lg font-medium text-gray-900 mb-3">
-              Past Lessons
+              Past Lessons by Month
             </h2>
 
             {lessonsLoading ? (
               <div className="text-sm text-gray-500">Loading lessons...</div>
-            ) : pastLessons.length === 0 ? (
+            ) : pastMonthKeys.length === 0 ? (
               <div className="text-sm text-gray-500">No past lessons.</div>
             ) : (
-              <div className="space-y-3">
-                {pastLessons.map((lesson) => (
-                  <LessonRow
-                    key={lesson.id}
-                    lesson={lesson}
-                    navigate={navigate}
-                    isPast={true}
-                  />
+              <div className="space-y-8">
+                {pastMonthKeys.map((monthKey) => (
+                  <div key={monthKey}>
+                    <h3 className="text-md font-medium text-gray-800 mb-3">
+                      {monthKey}
+                    </h3>
+
+                    <div className="space-y-3">
+                      {pastLessonsByMonth[monthKey].map((lesson) => (
+                        <LessonRow
+                          key={lesson.id}
+                          lesson={lesson}
+                          navigate={navigate}
+                          currentUserId={userInfo?.id}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -572,4 +612,4 @@ const ManageLessonsPage = () => {
   );
 };
 
-export default ManageLessonsPage;
+export default ManageStudentLessonsPage;

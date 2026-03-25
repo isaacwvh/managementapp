@@ -72,24 +72,49 @@ const formatDuration = (duration) => {
   return `${n % 1 === 0 ? n.toFixed(0) : n}h`;
 };
 
-const getStudentLinks = (lesson) => {
-  if (!Array.isArray(lesson?.student_links)) return [];
-  return lesson.student_links;
+const normalizeStatus = (raw) => {
+  return String(raw || '').trim().toLowerCase();
 };
 
-const getStudentName = (link, index) => {
-  return link?.student?.name || `Student ${index + 1}`;
+const getCurrentStudentLink = (lesson, currentUserId) => {
+  if (!Array.isArray(lesson?.student_links)) return null;
+
+  return (
+    lesson.student_links.find(
+      (link) =>
+        String(link?.student_id) === String(currentUserId) ||
+        String(link?.student?.id) === String(currentUserId)
+    ) || null
+  );
 };
 
-const getAttendanceStatus = (link) => {
-  return String(
+const getStudentLessonStatus = (lesson, currentUserId) => {
+  const link = getCurrentStudentLink(lesson, currentUserId);
+  return normalizeStatus(
     link?.attendance_status ??
       link?.attendance ??
       link?.status ??
       'assigned'
-  )
-    .trim()
-    .toLowerCase();
+  );
+};
+
+const getStudentPaidStatus = (lesson, currentUserId) => {
+  const link = getCurrentStudentLink(lesson, currentUserId);
+
+  const value =
+    link?.is_paid ??
+    link?.paid ??
+    link?.payment_status;
+
+  if (typeof value === 'boolean') return value;
+
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return (
+    normalized === 'paid' ||
+    normalized === 'true' ||
+    normalized === 'yes' ||
+    normalized === '1'
+  );
 };
 
 const statusBadgeClass = (status) => {
@@ -112,19 +137,20 @@ const formatAttendanceLabel = (status) => {
   if (status === 'attended') return 'Attended';
   if (status === 'missed') return 'Missed';
   if (status === 'cancelled') return 'Cancelled';
-  if (status === 'assigned') return 'Pending';
-  return 'Pending';
+  if (status === 'assigned') return 'Assigned';
+  return 'Assigned';
 };
 
-const LessonPreviewCard = ({ lesson, navigate }) => {
-  const students = getStudentLinks(lesson);
+const LessonPreviewCard = ({ lesson, navigate, currentUserId }) => {
+  const status = getStudentLessonStatus(lesson, currentUserId);
+  const isPaid = getStudentPaidStatus(lesson, currentUserId);
 
   return (
     <button
       type="button"
       onClick={() =>
         navigate(`/lessons/${lesson.id}`, {
-          state: { from: '/' },
+          state: { from: '/student-home' },
         })
       }
       className="w-full text-left rounded-xl border border-gray-200 bg-white p-4 hover:bg-gray-50 transition"
@@ -149,30 +175,23 @@ const LessonPreviewCard = ({ lesson, navigate }) => {
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
-            {students.length > 0 ? (
-              students.map((link, index) => {
-                const status = getAttendanceStatus(link);
-                return (
-                  <div
-                    key={`${lesson.id}-${link?.student?.id || link?.student_id || index}`}
-                    className="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1"
-                  >
-                    <span className="text-xs text-gray-700">
-                      {getStudentName(link, index)}
-                    </span>
-                    <span
-                      className={`text-[11px] font-medium rounded-full px-2 py-0.5 ${statusBadgeClass(
-                        status
-                      )}`}
-                    >
-                      {formatAttendanceLabel(status)}
-                    </span>
-                  </div>
-                );
-              })
-            ) : (
-              <span className="text-xs text-gray-400">No students</span>
-            )}
+            <span
+              className={`text-[11px] font-medium rounded-full px-2 py-0.5 ${statusBadgeClass(
+                status
+              )}`}
+            >
+              {formatAttendanceLabel(status)}
+            </span>
+
+            <span
+              className={`text-[11px] font-medium rounded-full px-2 py-0.5 ${
+                isPaid
+                  ? 'bg-green-100 text-green-800 border border-green-200'
+                  : 'bg-orange-100 text-orange-800 border border-orange-200'
+              }`}
+            >
+              {isPaid ? 'Paid' : 'Unpaid'}
+            </span>
           </div>
         </div>
 
@@ -184,7 +203,7 @@ const LessonPreviewCard = ({ lesson, navigate }) => {
   );
 };
 
-export const HomePage = () => {
+export const StudentHomePage = () => {
   const navigate = useNavigate();
   const token = useMemo(() => localStorage.getItem('token'), []);
 
@@ -236,27 +255,17 @@ export const HomePage = () => {
   }, [token]);
 
   useEffect(() => {
-  if (!userInfo) return;
-
-  const role = (userInfo.role || '').toLowerCase();
-
-  if (role === 'student') {
-    navigate('/student', { replace: true });
-  }
-}, [userInfo, navigate]);
-
-  useEffect(() => {
     const fetchLessons = async () => {
       setLoadingLessons(true);
 
       try {
         if (!token) return;
-        if ((userInfo?.role || '').toLowerCase() !== 'teacher') {
+        if ((userInfo?.role || '').toLowerCase() !== 'student') {
           setLessons([]);
           return;
         }
 
-        const response = await fetch('/api/lessons/my-lessons', {
+        const response = await fetch('/api/lessons/my-lessons-student', {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -289,7 +298,7 @@ export const HomePage = () => {
   }, [token, userInfo]);
 
   const role = useMemo(() => (userInfo?.role || '').toLowerCase(), [userInfo]);
-  const isTeacher = role === 'teacher';
+  const isStudent = role === 'student';
 
   const upcomingLessons = useMemo(() => {
     const now = new Date();
@@ -302,29 +311,15 @@ export const HomePage = () => {
 
   const notifications = useMemo(() => {
     const now = new Date();
-    const items = [];
 
-    lessons.forEach((lesson) => {
-      const isPast = lessonDateTime(lesson) <= now;
-      if (!isPast) return;
-
-      const studentLinks = getStudentLinks(lesson);
-      const pendingStudents = studentLinks.filter((link) => {
-        const status = getAttendanceStatus(link);
-        return status === 'assigned' || status === 'pending' || !status;
-      });
-
-      if (pendingStudents.length > 0) {
-        items.push({
-          type: 'pending-status',
-          lesson,
-          pendingCount: pendingStudents.length,
-        });
-      }
-    });
-
-    return items.sort((a, b) => lessonDateTime(b.lesson) - lessonDateTime(a.lesson));
-  }, [lessons]);
+    return lessons
+      .filter((lesson) => {
+        const isPast = lessonDateTime(lesson) <= now;
+        const isPaid = getStudentPaidStatus(lesson, userInfo?.id);
+        return isPast && !isPaid;
+      })
+      .sort((a, b) => lessonDateTime(b) - lessonDateTime(a));
+  }, [lessons, userInfo?.id]);
 
   if (loadingUser) {
     return (
@@ -341,7 +336,7 @@ export const HomePage = () => {
     );
   }
 
-  if (!isTeacher) {
+  if (!isStudent) {
     return (
       <div className="min-h-screen bg-gray-50">
         <AppNavbar title="Dashboard" />
@@ -355,7 +350,7 @@ export const HomePage = () => {
               <>
                 <h1 className="text-2xl font-light text-gray-900">Welcome</h1>
                 <p className="mt-2 text-gray-600">
-                  This home page is currently set up for teachers.
+                  This home page is only available to students.
                 </p>
               </>
             )}
@@ -383,7 +378,7 @@ export const HomePage = () => {
                 Welcome{userInfo?.name ? `, ${userInfo.name}` : ''}
               </h1>
               <p className="mt-2 text-sm text-gray-600">
-                Here’s your teaching dashboard and what needs attention.
+                Here’s your student dashboard and anything that needs attention.
               </p>
             </div>
 
@@ -423,27 +418,6 @@ export const HomePage = () => {
               </div>
             </div>
           </div>
-
-          {/* <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              onClick={() => navigate('/create-lesson')}
-              className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-800"
-            >
-              Create Lesson
-            </button>
-            <button
-              onClick={() => navigate('/manage-lessons')}
-              className="px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm hover:bg-gray-50"
-            >
-              Manage Lessons
-            </button>
-            <button
-              onClick={() => navigate('/analytics')}
-              className="px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm hover:bg-gray-50"
-            >
-              View Analytics
-            </button>
-          </div> */}
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
@@ -457,7 +431,7 @@ export const HomePage = () => {
               </div>
 
               <button
-                onClick={() => navigate('/manage-lessons')}
+                onClick={() => navigate('/student/manage-lessons')}
                 className="text-sm text-gray-600 hover:text-gray-900"
               >
                 View all
@@ -475,6 +449,7 @@ export const HomePage = () => {
                     key={lesson.id}
                     lesson={lesson}
                     navigate={navigate}
+                    currentUserId={userInfo?.id}
                   />
                 ))}
               </div>
@@ -486,7 +461,7 @@ export const HomePage = () => {
               <div>
                 <h2 className="text-2xl font-light text-gray-900">Notifications</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  Lessons that need your attention
+                  Past lessons that are still unpaid
                 </p>
               </div>
 
@@ -501,13 +476,13 @@ export const HomePage = () => {
               <div className="text-sm text-gray-500">No notifications right now.</div>
             ) : (
               <div className="space-y-3">
-                {notifications.map((item, index) => (
+                {notifications.map((lesson) => (
                   <button
-                    key={`${item.lesson.id}-${index}`}
+                    key={lesson.id}
                     type="button"
                     onClick={() =>
-                      navigate(`/lessons/${item.lesson.id}`, {
-                        state: { from: '/' },
+                      navigate(`/lessons/${lesson.id}`, {
+                        state: { from: '/student-home' },
                       })
                     }
                     className="w-full text-left rounded-xl border border-orange-200 bg-orange-50 p-4 hover:bg-orange-100 transition"
@@ -515,25 +490,27 @@ export const HomePage = () => {
                     <div className="flex flex-col gap-2">
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                         <span className="text-sm font-semibold text-gray-900">
-                          {formatDate(item.lesson.date)}
+                          {formatDate(lesson.date)}
                         </span>
                         <span className="text-sm text-gray-700">
-                          {formatTime(item.lesson.time)}
+                          {formatTime(lesson.time)}
                         </span>
                         <span className="text-sm text-gray-500">·</span>
                         <span className="text-sm text-gray-700">
-                          {item.lesson.subject || 'No subject'}
+                          {lesson.subject || 'No subject'}
                         </span>
                       </div>
 
                       <div className="text-sm text-orange-900">
-                        {item.pendingCount} student
-                        {item.pendingCount === 1 ? '' : 's'} still need attendance
-                        status updated.
+                        This past lesson is still unpaid.
                       </div>
 
-                      <div className="text-xs text-gray-600">
-                        {item.lesson.location || 'Unknown location'}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600">
+                        <span>{lesson.location || 'Unknown location'}</span>
+                        <span>·</span>
+                        <span>{formatDuration(lesson.duration) || 'No duration'}</span>
+                        <span>·</span>
+                        <span>{formatPrice(lesson.price)}</span>
                       </div>
                     </div>
                   </button>
@@ -547,4 +524,4 @@ export const HomePage = () => {
   );
 };
 
-export default HomePage;
+export default StudentHomePage;
