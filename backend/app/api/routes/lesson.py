@@ -260,8 +260,13 @@ def update_lesson_student_status(
     student_id: int,
     update_data: LessonStudentUpdate,
     db: Session = Depends(get_db),
-    current_teacher: User = Depends(get_current_teacher),
+    current_teacher: User = Depends(get_current_admin),
 ):
+    if current_teacher.role == 'student':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Students cannot edit lesson student status"
+        )
     lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
 
     if not lesson:
@@ -276,12 +281,12 @@ def update_lesson_student_status(
             detail="Not authorized to update this lesson"
         )
 
-    teacher_ids = [teacher.id for teacher in lesson.teachers]
-    if current_teacher.id not in teacher_ids:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only teachers assigned to this lesson can update statuses"
-        )
+    # teacher_ids = [teacher.id for teacher in lesson.teachers]
+    # if current_teacher.id not in teacher_ids:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Only teachers assigned to this lesson can update statuses"
+    #     )
 
     lesson_student = (
         db.query(LessonStudent)

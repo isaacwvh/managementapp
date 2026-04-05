@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import AppNavbar from '../layout/AppNavbar.jsx';
 
@@ -173,8 +173,9 @@ const shouldShowOverdueWarning = (lesson, studentId) => {
   const past = isPastLesson(lesson);
   const paid = getStudentPaidStatus(lesson, studentId);
   const sameMonth = isSameMonthAsNow(lesson);
+  const status = getStudentLessonStatus(lesson, studentId);
 
-  return past && !paid && !sameMonth;
+  return past && !paid && !sameMonth && status !== 'cancelled';
 };
 
 const LessonRow = ({ lesson, navigate, studentId }) => {
@@ -265,6 +266,10 @@ const AdminManageStudentPage = () => {
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
+  const [bulkPaying, setBulkPaying] = useState(false);
+  const [bulkPayMessage, setBulkPayMessage] = useState('');
+  const [monthBulkPaying, setMonthBulkPaying] = useState({});
+
   const token = useMemo(() => localStorage.getItem('token'), []);
   const backPath = location.state?.from || '/admin/students';
 
@@ -333,36 +338,36 @@ const AdminManageStudentPage = () => {
     fetchStudent();
   }, [role, token, studentId]);
 
-  useEffect(() => {
-    const fetchLessons = async () => {
-      setLessonsLoading(true);
+  const fetchLessons = useCallback(async () => {
+    setLessonsLoading(true);
 
-      try {
-        if (!token || !role || role !== 'admin' || !studentId) return;
+    try {
+      if (!token || !role || role !== 'admin' || !studentId) return;
 
-        const res = await fetch(`/api/lessons/admin/students/${studentId}/lessons`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+      const res = await fetch(`/api/lessons/admin/students/${studentId}/lessons`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-        if (!res.ok) {
-          const msg = await res.text();
-          setError(msg || `Failed to load lessons (${res.status})`);
-          setLessons([]);
-          return;
-        }
-
-        const data = await res.json();
-        setLessons(Array.isArray(data) ? data : []);
-      } catch {
-        setError('Network error occurred while loading lessons');
+      if (!res.ok) {
+        const msg = await res.text();
+        setError(msg || `Failed to load lessons (${res.status})`);
         setLessons([]);
-      } finally {
-        setLessonsLoading(false);
+        return;
       }
-    };
 
-    fetchLessons();
+      const data = await res.json();
+      setLessons(Array.isArray(data) ? data : []);
+    } catch {
+      setError('Network error occurred while loading lessons');
+      setLessons([]);
+    } finally {
+      setLessonsLoading(false);
+    }
   }, [role, token, studentId]);
+
+  useEffect(() => {
+    fetchLessons();
+  }, [fetchLessons]);
 
   const filteredLessons = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -401,6 +406,17 @@ const AdminManageStudentPage = () => {
     });
   }, [lessons, search, locationFilter, dateFilter, paymentFilter, statusFilter, studentId]);
 
+  const outstandingUnpaidLessons = useMemo(() => {
+    return lessons.filter((lesson) => {
+      const status = getStudentLessonStatus(lesson, studentId);
+      return (
+        isPastLesson(lesson) &&
+        !getStudentPaidStatus(lesson, studentId) &&
+        status !== 'cancelled'
+      );
+    });
+  }, [lessons, studentId]);
+
   const { upcomingLessons, pastLessonsByMonth } = useMemo(() => {
     const now = new Date();
     const upcoming = [];
@@ -432,6 +448,118 @@ const AdminManageStudentPage = () => {
   }, [filteredLessons]);
 
   const pastMonthKeys = useMemo(() => Object.keys(pastLessonsByMonth), [pastLessonsByMonth]);
+
+  const getOutstandingLessonsForMonth = useCallback(
+    (monthKey) => {
+      const monthLessons = pastLessonsByMonth[monthKey] || [];
+      return monthLessons.filter((lesson) => {
+        const status = getStudentLessonStatus(lesson, studentId);
+        return !getStudentPaidStatus(lesson, studentId) && status !== 'cancelled';
+      });
+    },
+    [pastLessonsByMonth, studentId]
+  );
+
+  const markLessonsPaid = async (targetLessons, successLabel) => {
+    if (!targetLessons.length) {
+      setBulkPayMessage('There are no unpaid lessons to mark as paid.');
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      targetLessons.map((lesson) =>
+        fetch(`/api/lessons/${lesson.id}/students/${studentId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            payment_status: 'paid',
+          }),
+        })
+      )
+    );
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value.ok) {
+        successCount += 1;
+      } else {
+        failCount += 1;
+      }
+    }
+
+    await fetchLessons();
+
+    if (failCount === 0) {
+      setBulkPayMessage(`Successfully marked ${successCount} ${successLabel} as paid.`);
+    } else if (successCount > 0) {
+      setBulkPayMessage(
+        `Marked ${successCount} ${successLabel} as paid, but ${failCount} update(s) failed.`
+      );
+    } else {
+      setBulkPayMessage(`Failed to update ${successLabel}.`);
+    }
+  };
+
+  const handleMarkAllOutstandingPaid = async () => {
+    if (bulkPaying) return;
+
+    setBulkPayMessage('');
+    setError('');
+
+    if (outstandingUnpaidLessons.length === 0) {
+      setBulkPayMessage('There are no outstanding unpaid lessons to mark as paid.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Mark ${outstandingUnpaidLessons.length} outstanding lesson(s) as paid for ${student?.name || 'this student'}?`
+    );
+
+    if (!confirmed) return;
+
+    setBulkPaying(true);
+
+    try {
+      await markLessonsPaid(outstandingUnpaidLessons, 'lesson(s)');
+    } catch {
+      setBulkPayMessage('An error occurred while updating outstanding lessons.');
+    } finally {
+      setBulkPaying(false);
+    }
+  };
+
+  const handleMarkMonthPaid = async (monthKey) => {
+    const monthLessons = getOutstandingLessonsForMonth(monthKey);
+
+    setBulkPayMessage('');
+    setError('');
+
+    if (monthLessons.length === 0) {
+      setBulkPayMessage(`There are no unpaid lessons in ${monthKey}.`);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Mark ${monthLessons.length} unpaid lesson(s) in ${monthKey} as paid for ${student?.name || 'this student'}?`
+    );
+
+    if (!confirmed) return;
+
+    setMonthBulkPaying((prev) => ({ ...prev, [monthKey]: true }));
+
+    try {
+      await markLessonsPaid(monthLessons, `lesson(s) in ${monthKey}`);
+    } catch {
+      setBulkPayMessage(`An error occurred while updating lessons in ${monthKey}.`);
+    } finally {
+      setMonthBulkPaying((prev) => ({ ...prev, [monthKey]: false }));
+    }
+  };
 
   if (loading) {
     return (
@@ -504,6 +632,33 @@ const AdminManageStudentPage = () => {
               {error}
             </div>
           )}
+
+          {bulkPayMessage && (
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-blue-800 text-sm">
+              {bulkPayMessage}
+            </div>
+          )}
+
+          <div className="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <div>
+              <h2 className="text-sm font-medium text-gray-900">
+                Payment shortcuts
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                {outstandingUnpaidLessons.length} outstanding unpaid past lesson
+                {outstandingUnpaidLessons.length === 1 ? '' : 's'} for this student
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleMarkAllOutstandingPaid}
+              disabled={bulkPaying || outstandingUnpaidLessons.length === 0}
+              className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {bulkPaying ? 'Updating...' : 'Mark all outstanding as paid'}
+            </button>
+          </div>
 
           <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
             <div className="xl:col-span-2">
@@ -629,24 +784,42 @@ const AdminManageStudentPage = () => {
               <div className="text-sm text-gray-500">No past lessons.</div>
             ) : (
               <div className="space-y-8">
-                {pastMonthKeys.map((monthKey) => (
-                  <div key={monthKey}>
-                    <h3 className="text-md font-medium text-gray-800 mb-3">
-                      {monthKey}
-                    </h3>
+                {pastMonthKeys.map((monthKey) => {
+                  const monthOutstandingLessons = getOutstandingLessonsForMonth(monthKey);
+                  const isMonthUpdating = !!monthBulkPaying[monthKey];
 
-                    <div className="space-y-3">
-                      {pastLessonsByMonth[monthKey].map((lesson) => (
-                        <LessonRow
-                          key={lesson.id}
-                          lesson={lesson}
-                          navigate={navigate}
-                          studentId={studentId}
-                        />
-                      ))}
+                  return (
+                    <div key={monthKey}>
+                      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <h3 className="text-md font-medium text-gray-800">
+                          {monthKey}
+                        </h3>
+
+                        <button
+                          type="button"
+                          onClick={() => handleMarkMonthPaid(monthKey)}
+                          disabled={isMonthUpdating || monthOutstandingLessons.length === 0}
+                          className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isMonthUpdating
+                            ? 'Updating...'
+                            : `Mark unpaid in ${monthKey} as paid`}
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {pastLessonsByMonth[monthKey].map((lesson) => (
+                          <LessonRow
+                            key={lesson.id}
+                            lesson={lesson}
+                            navigate={navigate}
+                            studentId={studentId}
+                          />
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
