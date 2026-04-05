@@ -16,7 +16,7 @@ import ProfilePage from './components/pages/ProfilePage.jsx';
 import AdminManageStudentsPage from './components/pages/AdminManageStudentsPage.jsx';
 import AdminManageStudentPage from './components/pages/AdminManageStudentPage.jsx';
 import AdminManageLessonsPage from './components/pages/AdminManageLessonsPage.jsx';
-import AdminLessonCreateForm from './components/pages/AdminCreateLessonForm.jsx.jsx';
+import AdminLessonCreateForm from './components/pages/AdminCreateLessonForm.jsx';
 import LessonEditPage from './components/pages/LessonEditPage.jsx';
 
 function App() {
