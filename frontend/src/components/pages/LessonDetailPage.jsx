@@ -494,29 +494,31 @@ const LessonDetailPage = () => {
                               </select>
                             </div>
 
-                            <div>
-                              <label className="block text-xs text-gray-500 mb-1">
-                                Payment
-                              </label>
-                              <select
-                                value={payment}
-                                disabled={savingPayment}
-                                onChange={(e) =>
-                                  handleStatusChange(
-                                    studentId,
-                                    'payment_status',
-                                    e.target.value
-                                  )
-                                }
-                                className="rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
-                              >
-                                {PAYMENT_OPTIONS.map((option) => (
-                                  <option key={option} value={option}>
-                                    {formatPaymentLabel(option)}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                            {isAdmin && (
+  <div>
+    <label className="block text-xs text-gray-500 mb-1">
+      Payment
+    </label>
+    <select
+      value={payment}
+      disabled={savingPayment}
+      onChange={(e) =>
+        handleStatusChange(
+          studentId,
+          'payment_status',
+          e.target.value
+        )
+      }
+      className="rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+    >
+      {PAYMENT_OPTIONS.map((option) => (
+        <option key={option} value={option}>
+          {formatPaymentLabel(option)}
+        </option>
+      ))}
+    </select>
+  </div>
+)}
                           </div>
                         ) : null}
                       </div>
