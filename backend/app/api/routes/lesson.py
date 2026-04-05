@@ -260,54 +260,72 @@ def update_lesson_student_status(
     student_id: int,
     update_data: LessonStudentUpdate,
     db: Session = Depends(get_db),
-    current_teacher: User = Depends(get_current_admin),
+    current_user: User = Depends(get_current_user),
 ):
-    if current_teacher.role == 'student':
+    if current_user.role == "student":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Students cannot edit lesson student status"
+            detail="Students cannot edit lesson student status",
         )
-    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
 
+    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
     if not lesson:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lesson not found"
+            detail="Lesson not found",
         )
 
-    if lesson.organisation_id != current_teacher.organisation_id:
+    if lesson.organisation_id != current_user.organisation_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to update this lesson"
+            detail="Not authorized to update this lesson",
         )
-
-    # teacher_ids = [teacher.id for teacher in lesson.teachers]
-    # if current_teacher.id not in teacher_ids:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_403_FORBIDDEN,
-    #         detail="Only teachers assigned to this lesson can update statuses"
-    #     )
 
     lesson_student = (
         db.query(LessonStudent)
         .filter(
             LessonStudent.lesson_id == lesson_id,
-            LessonStudent.student_id == student_id
+            LessonStudent.student_id == student_id,
         )
         .first()
     )
-
     if not lesson_student:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student is not assigned to this lesson"
+            detail="Student is not assigned to this lesson",
         )
 
-    if update_data.attendance_status is not None:
-        lesson_student.attendance_status = update_data.attendance_status
+    # Teacher permissions
+    if current_user.role == "teacher":
+        teacher_ids = [teacher.id for teacher in lesson.teachers]
+        if current_user.id not in teacher_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only teachers assigned to this lesson can update attendance",
+            )
 
-    if update_data.payment_status is not None:
-        lesson_student.payment_status = update_data.payment_status
+        if update_data.payment_status is not None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Teachers cannot update payment status",
+            )
+
+        if update_data.attendance_status is not None:
+            lesson_student.attendance_status = update_data.attendance_status
+
+    # Admin permissions
+    elif current_user.role == "admin":
+        if update_data.attendance_status is not None:
+            lesson_student.attendance_status = update_data.attendance_status
+
+        if update_data.payment_status is not None:
+            lesson_student.payment_status = update_data.payment_status
+
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid role for this action",
+        )
 
     db.commit()
     db.refresh(lesson_student)
